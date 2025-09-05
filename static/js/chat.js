@@ -50,6 +50,7 @@ function fetchIceToken() {
 // Connect to avatar service
 function connectAvatar() {
     document.getElementById('startSession').disabled = true
+    updateStatusIndicator('Connecting to Avatar...', 'connecting')
     waitForPeerConnectionAndStartSession()
     document.getElementById('configuration').hidden = true
 }
@@ -244,13 +245,13 @@ function preparePeerConnection() {
                 }
 
                 // Append the new video element
-                videoElement.style.width = '960px'
+                videoElement.style.width = '100%'
                 document.getElementById('remoteVideo').appendChild(videoElement)
 
                 console.log(`WebRTC ${event.track.kind} channel connected.`)
+                updateStatusIndicator('Avatar Connected', 'connected')
                 document.getElementById('microphone').disabled = false
                 document.getElementById('stopSession').disabled = false
-                document.getElementById('remoteVideo').style.width = '960px'
                 document.getElementById('chatHistory').hidden = false
                 document.getElementById('latencyLog').hidden = false
                 document.getElementById('showTypeMessage').disabled = false
@@ -286,11 +287,19 @@ function preparePeerConnection() {
                 }
 
                 isSpeaking = true
+                updateStatusIndicator('Avatar Speaking', 'connected')
                 document.getElementById('stopSpeaking').disabled = false
+                // Show recording indicator
+                const recordingIndicator = document.getElementById('recordingIndicator')
+                if (recordingIndicator) recordingIndicator.style.display = 'flex'
             } else if (e.data.includes("EVENT_TYPE_SWITCH_TO_IDLE")) {
                 isSpeaking = false
                 lastSpeakTime = new Date()
+                updateStatusIndicator('Avatar Ready', 'connected')
                 document.getElementById('stopSpeaking').disabled = true
+                // Hide recording indicator
+                const recordingIndicator = document.getElementById('recordingIndicator')
+                if (recordingIndicator) recordingIndicator.style.display = 'none'
             } else if (e.data.includes("EVENT_TYPE_SESSION_END")) {
                 if (document.getElementById('autoReconnectAvatar').checked && !userClosedSession && !isReconnecting) {
                     // No longer reconnect when there is no interaction for a while
@@ -583,10 +592,32 @@ window.onload = () => {
     setInterval(() => {
         checkHung()
     }, 2000) // Check session activity every 2 seconds
+
+    // Update status indicator
+    updateStatusIndicator('Initializing...', 'initializing')
+
+    // Auto-start session when page loads
+    setTimeout(() => {
+        window.startSession()
+    }, 1000) // Wait 1 second for all initialization to complete
+}
+
+// Update status indicator
+function updateStatusIndicator(text, status) {
+    const statusText = document.getElementById('statusText')
+    const statusDot = document.getElementById('statusDot')
+    
+    if (statusText) statusText.textContent = text
+    if (statusDot) {
+        statusDot.className = 'status-dot'
+        if (status === 'connected') statusDot.classList.add('connected')
+    }
 }
 
 window.startSession = () => {
     lastInteractionTime = new Date()
+    updateStatusIndicator('Connecting...', 'connecting')
+    
     if (enableWebSockets) {
         setupWebSocket()
     }
@@ -604,6 +635,7 @@ window.startSession = () => {
         document.getElementById('chatHistory').hidden = false
         document.getElementById('latencyLog').hidden = false
         document.getElementById('showTypeMessage').disabled = false
+        updateStatusIndicator('Session Active', 'connected')
         return
     }
 
@@ -637,6 +669,7 @@ window.stopSpeaking = () => {
 
 window.stopSession = () => {
     lastInteractionTime = new Date()
+    updateStatusIndicator('Disconnecting...', 'initializing')
     document.getElementById('startSession').disabled = false
     document.getElementById('microphone').disabled = true
     document.getElementById('stopSession').disabled = true
@@ -652,6 +685,10 @@ window.stopSession = () => {
 
     userClosedSession = true // Indicating the session was closed by user on purpose, not due to network issue
     disconnectAvatar(true)
+    
+    setTimeout(() => {
+        updateStatusIndicator('Session Ended', 'initializing')
+    }, 1000)
 }
 
 window.clearChatHistory = () => {
@@ -676,10 +713,14 @@ window.clearChatHistory = () => {
 
 window.microphone = () => {
     lastInteractionTime = new Date()
-    if (document.getElementById('microphone').innerHTML === 'Stop Microphone') {
+    const micButton = document.getElementById('microphone')
+    const micIcon = micButton.querySelector('i')
+    const micText = micButton.querySelector('span')
+    
+    if (micText.textContent === 'Stop Microphone') {
         // Stop microphone for websocket mode
         if (socket !== undefined) {
-            document.getElementById('microphone').disabled = true
+            micButton.disabled = true
             fetch('/api/disconnectSTT', {
                 method: 'POST',
                 headers: {
@@ -688,8 +729,10 @@ window.microphone = () => {
                 body: ''
             })
             .then(() => {
-                document.getElementById('microphone').innerHTML = 'Start Microphone'
-                document.getElementById('microphone').disabled = false
+                micText.textContent = 'Start Microphone'
+                micIcon.className = 'fas fa-microphone'
+                micButton.disabled = false
+                updateStatusIndicator('Microphone Off', 'connected')
                 if (audioContext !== undefined) {
                     audioContext.close()
                     audioContext = undefined
@@ -698,14 +741,16 @@ window.microphone = () => {
         }
 
         // Stop microphone
-        document.getElementById('microphone').disabled = true
+        micButton.disabled = true
         speechRecognizer.stopContinuousRecognitionAsync(
             () => {
-                document.getElementById('microphone').innerHTML = 'Start Microphone'
-                document.getElementById('microphone').disabled = false
+                micText.textContent = 'Start Microphone'
+                micIcon.className = 'fas fa-microphone'
+                micButton.disabled = false
+                updateStatusIndicator('Microphone Off', 'connected')
             }, (err) => {
                 console.log("Failed to stop continuous recognition:", err)
-                document.getElementById('microphone').disabled = false
+                micButton.disabled = false
             })
 
         return
@@ -744,9 +789,11 @@ window.microphone = () => {
             body: ''
         })
         .then(response => {
-            document.getElementById('microphone').disabled = false
+            micButton.disabled = false
             if (response.ok) {
-                document.getElementById('microphone').innerHTML = 'Stop Microphone'
+                micText.textContent = 'Stop Microphone'
+                micIcon.className = 'fas fa-microphone-slash'
+                updateStatusIndicator('Listening...', 'connected')
 
                 navigator.mediaDevices
                 .getUserMedia({
@@ -829,14 +876,16 @@ window.microphone = () => {
 
             // Auto stop microphone when a phrase is recognized, when it's not continuous conversation mode
             if (!document.getElementById('continuousConversation').checked) {
-                document.getElementById('microphone').disabled = true
+                micButton.disabled = true
                 speechRecognizer.stopContinuousRecognitionAsync(
                     () => {
-                        document.getElementById('microphone').innerHTML = 'Start Microphone'
-                        document.getElementById('microphone').disabled = false
+                        micText.textContent = 'Start Microphone'
+                        micIcon.className = 'fas fa-microphone'
+                        micButton.disabled = false
+                        updateStatusIndicator('Processing...', 'connected')
                     }, (err) => {
                         console.log("Failed to stop continuous recognition:", err)
-                        document.getElementById('microphone').disabled = false
+                        micButton.disabled = false
                     })
             }
 
@@ -857,11 +906,13 @@ window.microphone = () => {
     recognitionStartedTime = new Date()
     speechRecognizer.startContinuousRecognitionAsync(
         () => {
-            document.getElementById('microphone').innerHTML = 'Stop Microphone'
-            document.getElementById('microphone').disabled = false
+            micText.textContent = 'Stop Microphone'
+            micIcon.className = 'fas fa-microphone-slash'
+            micButton.disabled = false
+            updateStatusIndicator('Listening...', 'connected')
         }, (err) => {
             console.log("Failed to start continuous recognition:", err)
-            document.getElementById('microphone').disabled = false
+            micButton.disabled = false
         })
 }
 
