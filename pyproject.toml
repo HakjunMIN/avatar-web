@@ -1,0 +1,22 @@
+[project]
+name = "avatar-web"
+version = "0.1.0"
+description = "Microsoft Azure TTS Talking Avatar sample application"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "azure-cognitiveservices-speech",
+    "azure-identity",
+    "flask",
+    "flask-socketio>=5.5.1",
+    "openai>=1.76.0",
+    "pytz",
+    "requests",
+    "torch>=2.6.0",
+    "numpy",
+    "torchaudio>=2.6.0",
+    "python-dotenv",
+]
+
+[tool.uv]
+dev-dependencies = []
