@@ -97,11 +97,8 @@ def connectAvatar() -> Response:
     disconnectAvatarInternal(client_id, isReconnecting)
     client_context = client_contexts[client_id]
 
-    client_context['azure_openai_deployment_name'] = (
-        request.headers.get('AoaiDeploymentName') if request.headers.get('AoaiDeploymentName') else azure_openai_deployment_name)
-    client_context['cognitive_search_index_name'] = (
-        request.headers.get('CognitiveSearchIndexName') if request.headers.get('CognitiveSearchIndexName')
-        else cognitive_search_index_name)
+    client_context['azure_openai_deployment_name'] = azure_openai_deployment_name
+    client_context['cognitive_search_index_name'] = cognitive_search_index_name
     client_context['tts_voice'] = request.headers.get('TtsVoice') if request.headers.get('TtsVoice') else default_tts_voice
     client_context['custom_voice_endpoint_id'] = request.headers.get('CustomVoiceEndpointId')
     client_context['personal_voice_speaker_profile_id'] = request.headers.get('PersonalVoiceSpeakerProfileId')
