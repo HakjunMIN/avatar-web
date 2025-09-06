@@ -27,6 +27,8 @@ var isFirstRecognizingEvent = true
 var sttLatencyRegex = new RegExp(/<STTL>(\d+)<\/STTL>/)
 var firstTokenLatencyRegex = new RegExp(/<FTL>(\d+)<\/FTL>/)
 var firstSentenceLatencyRegex = new RegExp(/<FSL>(\d+)<\/FSL>/)
+// Timestamp (ms) of last typed submission to suppress duplicate STT handling
+var lastTypeSubmitTime = 0
 
 // Fetch ICE token from the server
 function fetchIceToken() {
@@ -865,6 +867,13 @@ window.microphone = () => {
                 return
             }
 
+            // If a typed submission happened recently, skip STT handling to avoid duplicate User entry
+            if (lastTypeSubmitTime !== 0 && (Date.now() - lastTypeSubmitTime) < 1500) {
+                // clear the flag and ignore this STT event
+                lastTypeSubmitTime = 0
+                return
+            }
+
             let recognitionResultReceivedTime = new Date()
             let speechFinishedOffset = (e.result.offset + e.result.duration) / 10000
             let sttLatency = recognitionResultReceivedTime - recognitionStartedTime - speechFinishedOffset
@@ -924,31 +933,40 @@ window.updataEnableOyd = () => {
 }
 
 window.updateTypeMessageBox = () => {
+    const userMessageBox = document.getElementById('userMessageBox')
+    const submitHandler = (e) => {
+        if (e.key !== 'Enter') return
+        const raw = document.getElementById('userMessageBox').value
+        const userQuery = raw.trim()
+        if (userQuery === '') return
+
+        let chatHistoryTextArea = document.getElementById('chatHistory')
+        if (chatHistoryTextArea.innerHTML !== '' && !chatHistoryTextArea.innerHTML.endsWith('\n\n')) {
+            chatHistoryTextArea.innerHTML += '\n\n'
+        }
+
+        chatHistoryTextArea.innerHTML += "User: " + userQuery + '\n\n'
+        chatHistoryTextArea.scrollTop = chatHistoryTextArea.scrollHeight
+
+        if (isSpeaking) {
+            window.stopSpeaking()
+        }
+
+        // Mark typed submission time to suppress immediate STT duplicate
+        lastTypeSubmitTime = Date.now()
+
+        handleUserQuery(userQuery)
+        document.getElementById('userMessageBox').value = ''
+    }
+
     if (document.getElementById('showTypeMessage').checked) {
-        document.getElementById('userMessageBox').hidden = false
-        document.getElementById('userMessageBox').addEventListener('keyup', (e) => {
-            if (e.key === 'Enter') {
-                const userQuery = document.getElementById('userMessageBox').value
-                if (userQuery !== '') {
-                    let chatHistoryTextArea = document.getElementById('chatHistory')
-                    if (chatHistoryTextArea.innerHTML !== '' && !chatHistoryTextArea.innerHTML.endsWith('\n\n')) {
-                        chatHistoryTextArea.innerHTML += '\n\n'
-                    }
-
-                    chatHistoryTextArea.innerHTML += "User: " + userQuery.trim('\n') + '\n\n'
-                    chatHistoryTextArea.scrollTop = chatHistoryTextArea.scrollHeight
-
-                    if (isSpeaking) {
-                        window.stopSpeaking()
-                    }
-
-                    handleUserQuery(userQuery.trim('\n'))
-                    document.getElementById('userMessageBox').value = ''
-                }
-            }
-        })
+        userMessageBox.hidden = false
+        // prevent duplicate handlers
+        userMessageBox.removeEventListener('keyup', submitHandler)
+        userMessageBox.addEventListener('keyup', submitHandler)
     } else {
-        document.getElementById('userMessageBox').hidden = true
+        userMessageBox.hidden = true
+        userMessageBox.removeEventListener('keyup', submitHandler)
     }
 }
 
