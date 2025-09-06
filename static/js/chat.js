@@ -902,7 +902,7 @@ window.microphone = () => {
                 chatHistoryTextArea.innerHTML += '\n\n'
             }
 
-            chatHistoryTextArea.innerHTML += "User: " + userQuery + '\n\n'
+            chatHistoryTextArea.innerHTML += userQuery + '\n\n'
             chatHistoryTextArea.scrollTop = chatHistoryTextArea.scrollHeight
 
             handleUserQuery(userQuery)
@@ -945,7 +945,7 @@ window.updateTypeMessageBox = () => {
             chatHistoryTextArea.innerHTML += '\n\n'
         }
 
-        chatHistoryTextArea.innerHTML += "User: " + userQuery + '\n\n'
+        chatHistoryTextArea.innerHTML += userQuery + '\n\n'
         chatHistoryTextArea.scrollTop = chatHistoryTextArea.scrollHeight
 
         if (isSpeaking) {

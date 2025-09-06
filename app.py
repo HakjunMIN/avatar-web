@@ -19,7 +19,6 @@ import traceback
 import uuid
 from flask import Flask, Response, render_template, request
 from flask_socketio import SocketIO, join_room
-from azure.identity import DefaultAzureCredential
 from openai import AzureOpenAI
 from vad_iterator import VADIterator, int2float
 from dotenv import load_dotenv
@@ -37,9 +36,6 @@ socketio = SocketIO(app)
 # Speech resource (required)
 speech_region = os.environ.get('SPEECH_REGION')  # e.g. westus2
 speech_key = os.environ.get('SPEECH_KEY')
-speech_private_endpoint = os.environ.get('SPEECH_PRIVATE_ENDPOINT')  # e.g. https://my-speech-service.cognitiveservices.azure.com/ (optional)  # noqa: E501
-speech_resource_url = os.environ.get('SPEECH_RESOURCE_URL')  # e.g. /subscriptions/6e83d8b7-00dd-4b0a-9e98-dab9f060418b/resourceGroups/my-rg/providers/Microsoft.CognitiveServices/accounts/my-speech (optional, only used for private endpoint)  # noqa: E501
-user_assigned_managed_identity_client_id = os.environ.get('USER_ASSIGNED_MANAGED_IDENTITY_CLIENT_ID')  # e.g. the client id of user assigned managed identity accociated to your app service (optional, only used for private endpoint and user assigned managed identity)  # noqa: E501
 # OpenAI resource (required for chat scenario)
 azure_openai_endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT')  # e.g. https://my-aoai.openai.azure.com/
 azure_openai_api_key = os.environ.get('AZURE_OPENAI_API_KEY')
@@ -85,19 +81,12 @@ if enable_vad and enable_websockets:
 # The default route, which shows the default web page (basic.html)
 @app.route("/")
 def index():
-    return render_template("basic.html", methods=["GET"], client_id=initializeClient())
-
-
-# The basic route, which shows the basic web page
-@app.route("/basic")
-def basicView():
-    return render_template("basic.html", methods=["GET"], client_id=initializeClient())
-
+    return render_template("static/chat.html", methods=["GET"], client_id=initializeClient())
 
 # The chat route, which shows the chat web page
 @app.route("/chat")
 def chatView():
-    return render_template("chat.html", methods=["GET"], client_id=initializeClient(), enable_websockets=enable_websockets)
+    return render_template("static/chat.html", methods=["GET"], client_id=initializeClient(), enable_websockets=enable_websockets)
 
 
 # The API route to get the speech token
@@ -105,8 +94,6 @@ def chatView():
 def getSpeechToken() -> Response:
     response = Response(speech_token, status=200)
     response.headers['SpeechRegion'] = speech_region
-    if speech_private_endpoint:
-        response.headers['SpeechPrivateEndpoint'] = speech_private_endpoint
     return response
 
 
@@ -157,29 +144,16 @@ def connectAvatar() -> Response:
     custom_voice_endpoint_id = client_context['custom_voice_endpoint_id']
 
     try:
-        if speech_private_endpoint:
-            speech_private_endpoint_wss = speech_private_endpoint.replace('https://', 'wss://')
-            if enable_token_auth_for_speech:
-                while not speech_token:
-                    time.sleep(0.2)
-                speech_config = speechsdk.SpeechConfig(
-                    endpoint=f'{speech_private_endpoint_wss}/tts/cognitiveservices/websocket/v1?enableTalkingAvatar=true')
-                speech_config.authorization_token = speech_token
-            else:
-                speech_config = speechsdk.SpeechConfig(
-                    subscription=speech_key,
-                    endpoint=f'{speech_private_endpoint_wss}/tts/cognitiveservices/websocket/v1?enableTalkingAvatar=true')
+        if enable_token_auth_for_speech:
+            while not speech_token:
+                time.sleep(0.2)
+            speech_config = speechsdk.SpeechConfig(
+                endpoint=f'wss://{speech_region}.tts.speech.microsoft.com/cognitiveservices/websocket/v1?enableTalkingAvatar=true')
+            speech_config.authorization_token = speech_token
         else:
-            if enable_token_auth_for_speech:
-                while not speech_token:
-                    time.sleep(0.2)
-                speech_config = speechsdk.SpeechConfig(
-                    endpoint=f'wss://{speech_region}.tts.speech.microsoft.com/cognitiveservices/websocket/v1?enableTalkingAvatar=true')
-                speech_config.authorization_token = speech_token
-            else:
-                speech_config = speechsdk.SpeechConfig(
-                    subscription=speech_key,
-                    endpoint=f'wss://{speech_region}.tts.speech.microsoft.com/cognitiveservices/websocket/v1?enableTalkingAvatar=true')
+            speech_config = speechsdk.SpeechConfig(
+                subscription=speech_key,
+                endpoint=f'wss://{speech_region}.tts.speech.microsoft.com/cognitiveservices/websocket/v1?enableTalkingAvatar=true')
 
         if custom_voice_endpoint_id:
             speech_config.endpoint_id = custom_voice_endpoint_id
@@ -526,29 +500,16 @@ def initializeClient() -> uuid.UUID:
 def refreshIceToken() -> None:
     global ice_token
     while True:
-        ice_token_response = None
-        if speech_private_endpoint:
-            if enable_token_auth_for_speech:
-                while not speech_token:
-                    time.sleep(0.2)
-                ice_token_response = requests.get(
-                    f'{speech_private_endpoint}/tts/cognitiveservices/avatar/relay/token/v1',
-                    headers={'Authorization': f'Bearer {speech_token}'})
-            else:
-                ice_token_response = requests.get(
-                    f'{speech_private_endpoint}/tts/cognitiveservices/avatar/relay/token/v1',
-                    headers={'Ocp-Apim-Subscription-Key': speech_key})
+        if enable_token_auth_for_speech:
+            while not speech_token:
+                time.sleep(0.2)
+            ice_token_response = requests.get(
+                f'https://{speech_region}.tts.speech.microsoft.com/cognitiveservices/avatar/relay/token/v1',
+                headers={'Authorization': f'Bearer {speech_token}'})
         else:
-            if enable_token_auth_for_speech:
-                while not speech_token:
-                    time.sleep(0.2)
-                ice_token_response = requests.get(
-                    f'https://{speech_region}.tts.speech.microsoft.com/cognitiveservices/avatar/relay/token/v1',
-                    headers={'Authorization': f'Bearer {speech_token}'})
-            else:
-                ice_token_response = requests.get(
-                    f'https://{speech_region}.tts.speech.microsoft.com/cognitiveservices/avatar/relay/token/v1',
-                    headers={'Ocp-Apim-Subscription-Key': speech_key})
+            ice_token_response = requests.get(
+                f'https://{speech_region}.tts.speech.microsoft.com/cognitiveservices/avatar/relay/token/v1',
+                headers={'Ocp-Apim-Subscription-Key': speech_key})
         if ice_token_response.status_code == 200:
             ice_token = ice_token_response.text
         else:
@@ -561,14 +522,9 @@ def refreshSpeechToken() -> None:
     global speech_token
     while True:
         # Refresh the speech token every 9 minutes
-        if speech_private_endpoint:
-            credential = DefaultAzureCredential(managed_identity_client_id=user_assigned_managed_identity_client_id)
-            token = credential.get_token('https://cognitiveservices.azure.com/.default')
-            speech_token = f'aad#{speech_resource_url}#{token.token}'
-        else:
-            speech_token = requests.post(
-                f'https://{speech_region}.api.cognitive.microsoft.com/sts/v1.0/issueToken',
-                headers={'Ocp-Apim-Subscription-Key': speech_key}).text
+        speech_token = requests.post(
+            f'https://{speech_region}.api.cognitive.microsoft.com/sts/v1.0/issueToken',
+            headers={'Ocp-Apim-Subscription-Key': speech_key}).text
         time.sleep(60 * 9)
 
 
