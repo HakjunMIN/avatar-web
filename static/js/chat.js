@@ -40,6 +40,10 @@ function fetchIceToken() {
                 iceServerCredential = data.Password
                 console.log(`[${new Date().toISOString()}] ICE token fetched.`)
                 preparePeerConnection()
+                // After first successful ICE token fetch, if no active session, show ready status
+                if (!sessionActive) {
+                    updateStatusIndicator('Ready to Start', 'initializing')
+                }
             })
         } else {
             console.error(`Failed fetching ICE token: ${response.status} ${response.statusText}`)
@@ -595,11 +599,6 @@ window.onload = () => {
 
     // Update status indicator
     updateStatusIndicator('Initializing...', 'initializing')
-
-    // Auto-start session when page loads
-    setTimeout(() => {
-        window.startSession()
-    }, 1000) // Wait 1 second for all initialization to complete
 }
 
 // Update status indicator

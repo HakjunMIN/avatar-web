@@ -428,7 +428,7 @@ body {
     box-shadow: var(--shadow-sm);
     border: 1px solid var(--border-color);
     max-height: 300px;
-    display: flex;
+    display: none;
     flex-direction: column;
 }
 

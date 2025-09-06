@@ -313,7 +313,7 @@ def connectSTT() -> Response:
                     if user_query == '':
                         return
 
-                    socketio.emit("response", {'path': 'api.chat', 'chatResponse': '\n\nUser: ' + user_query + '\n\n'}, room=client_id)
+                    socketio.emit("response", {'path': 'api.chat', 'chatResponse': '\n\n ' + user_query + '\n\n'}, room=client_id)
                     recognition_result_received_time = datetime.datetime.now(pytz.UTC)
                     speech_finished_offset = (evt.result.offset + evt.result.duration) / 10000
                     stt_latency = round((recognition_result_received_time - speech_recognition_start_time).total_seconds() * 1000 - speech_finished_offset)  # noqa: E501
