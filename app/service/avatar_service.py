@@ -7,8 +7,6 @@ import requests
 import threading
 import time
 import uuid
-
-
 class AvatarService:
     def __init__(self, speech_region: str, speech_key: str, ice_server_url: str = None, 
                  ice_server_url_remote: str = None, ice_server_username: str = None, 
@@ -26,11 +24,9 @@ class AvatarService:
         self.speech_token = None
         self.ice_token = None
         
-        # 토큰 갱신 스레드 시작
         self._start_token_refresh_threads()
     
     def _start_token_refresh_threads(self):
-        """토큰 갱신 스레드 시작"""
         speech_token_thread = threading.Thread(target=self._refresh_speech_token)
         speech_token_thread.daemon = True
         speech_token_thread.start()
@@ -40,7 +36,6 @@ class AvatarService:
         ice_token_thread.start()
     
     def _refresh_speech_token(self):
-        """Speech 토큰 갱신"""
         while True:
             try:
                 self.speech_token = requests.post(
@@ -52,7 +47,6 @@ class AvatarService:
             time.sleep(60 * 9)  # 9분마다 갱신
     
     def _refresh_ice_token(self):
-        """ICE 토큰 갱신"""
         while True:
             try:
                 if self.enable_token_auth:
@@ -77,7 +71,6 @@ class AvatarService:
             time.sleep(60 * 60 * 24)  # 24시간마다 갱신
     
     def get_speech_token(self) -> str:
-        """Speech 토큰 반환"""
         return self.speech_token
     
     def get_ice_token(self) -> str:
@@ -99,7 +92,6 @@ class AvatarService:
                       personal_voice_speaker_profile_id: str = None) -> str:
         """Avatar 연결"""
         try:
-            # Speech Config 설정
             if self.enable_token_auth:
                 while not self.speech_token:
                     time.sleep(0.2)
@@ -116,11 +108,9 @@ class AvatarService:
             if custom_voice_endpoint_id:
                 speech_config.endpoint_id = custom_voice_endpoint_id
             
-            # Speech Synthesizer 생성
             speech_synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=None)
             client_context['speech_synthesizer'] = speech_synthesizer
             
-            # ICE 토큰 설정
             ice_token_obj = json.loads(self.ice_token) if self.ice_token else {}
             if self.ice_server_url and self.ice_server_username and self.ice_server_password:
                 ice_token_obj = {
@@ -129,14 +119,12 @@ class AvatarService:
                     'Password': self.ice_server_password
                 }
             
-            # Avatar 설정
             avatar_config = self._create_avatar_config(
                 local_sdp, ice_token_obj, avatar_character, avatar_style,
                 background_color, background_image_url, is_custom_avatar,
                 transparent_background, video_crop
             )
             
-            # 연결 설정
             connection = speechsdk.Connection.from_speech_synthesizer(speech_synthesizer)
             connection.connected.connect(lambda evt: print('TTS Avatar service connected.'))
             
@@ -154,7 +142,6 @@ class AvatarService:
             client_context['custom_voice_endpoint_id'] = custom_voice_endpoint_id
             client_context['personal_voice_speaker_profile_id'] = personal_voice_speaker_profile_id
             
-            # Avatar 연결 시작
             speech_synthesis_result = speech_synthesizer.speak_text_async('').get()
             print(f'Result id for avatar connection: {speech_synthesis_result.result_id}')
             
@@ -176,7 +163,6 @@ class AvatarService:
     def _create_avatar_config(self, local_sdp: str, ice_token_obj: dict, avatar_character: str,
                              avatar_style: str, background_color: str, background_image_url: str,
                              is_custom_avatar: bool, transparent_background: bool, video_crop: bool) -> dict:
-        """Avatar 설정 생성"""
         return {
             'synthesis': {
                 'video': {
@@ -220,7 +206,6 @@ class AvatarService:
         }
     
     def disconnect_avatar(self, client_context: dict, is_reconnecting: bool = False):
-        """Avatar 연결 해제"""
         self.stop_speaking(client_context, is_reconnecting)
         time.sleep(2)
         avatar_connection = client_context.get('speech_synthesizer_connection')
@@ -228,7 +213,6 @@ class AvatarService:
             avatar_connection.close()
     
     def speak_with_queue(self, text: str, ending_silence_ms: int, client_context: dict, client_id: uuid.UUID):
-        """큐를 사용한 음성 출력"""
         spoken_text_queue = client_context.get('spoken_text_queue', [])
         is_speaking = client_context.get('is_speaking', False)
         
@@ -261,12 +245,10 @@ class AvatarService:
     
     def speak_text(self, text: str, voice: str, speaker_profile_id: str, 
                    ending_silence_ms: int, client_context: dict) -> str:
-        """텍스트 음성 출력"""
         ssml = self._create_ssml(text, voice, speaker_profile_id, ending_silence_ms)
         return self.speak_ssml(ssml, client_context, False)
     
     def _create_ssml(self, text: str, voice: str, speaker_profile_id: str, ending_silence_ms: int) -> str:
-        """SSML 생성"""
         base_ssml = f"""<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='http://www.w3.org/2001/mstts' xml:lang='en-US'>
                          <voice name='{voice}'>
                              <mstts:ttsembedding speakerProfileId='{speaker_profile_id}'>
@@ -289,7 +271,6 @@ class AvatarService:
         return base_ssml
     
     def speak_ssml(self, ssml: str, client_context: dict, asynchronized: bool) -> str:
-        """SSML 음성 출력"""
         speech_synthesizer = client_context.get('speech_synthesizer')
         if not speech_synthesizer:
             raise Exception("Speech synthesizer not initialized")
@@ -309,7 +290,6 @@ class AvatarService:
         return speech_synthesis_result.result_id
     
     def stop_speaking(self, client_context: dict, skip_clearing_spoken_text_queue: bool = False):
-        """음성 출력 중지"""
         client_context['is_speaking'] = False
         
         if not skip_clearing_spoken_text_queue:

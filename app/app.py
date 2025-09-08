@@ -5,7 +5,6 @@ import uuid
 from flask import Flask, Response, render_template, request
 from flask_socketio import SocketIO
 
-# 서비스 모듈 임포트
 from service.config_service import ConfigService
 from service.client_manager import ClientManager
 from service.avatar_service import AvatarService
@@ -14,14 +13,11 @@ from service.chat_service import chat_service
 from util.vad_iterator import VADService
 from service.websocket_handler import WebSocketHandler
 
-# 설정 초기화
 config = ConfigService()
 
-# Flask 앱 초기화
 app = Flask(__name__, template_folder='.')
 socketio = SocketIO(app)
 
-# 서비스 초기화
 client_manager = ClientManager(
     config.azure_openai_deployment_name,
     config.cognitive_search_index_name,
@@ -57,7 +53,6 @@ websocket_handler = WebSocketHandler(
     client_manager, avatar_service, stt_service, chat_service, vad_service
 )
 
-# Chat Service 설정
 chat_service.set_client_contexts(client_manager.get_all_contexts())
 
 
@@ -98,13 +93,9 @@ def getStatus() -> Response:
 def connectAvatar() -> Response:
     client_id = uuid.UUID(request.headers.get('ClientId'))
     is_reconnecting = request.headers.get('Reconnect') and request.headers.get('Reconnect').lower() == 'true'
-    
-    # 기존 Avatar 연결 해제
     client_context = client_manager.get_client_context(client_id)
     avatar_service.disconnect_avatar(client_context, is_reconnecting)
-    
     try:
-        # Avatar 연결 파라미터 수집
         local_sdp = request.data.decode('utf-8')
         avatar_character = request.headers.get('AvatarCharacter')
         avatar_style = request.headers.get('AvatarStyle')
@@ -116,8 +107,6 @@ def connectAvatar() -> Response:
         tts_voice = request.headers.get('TtsVoice')
         custom_voice_endpoint_id = request.headers.get('CustomVoiceEndpointId')
         personal_voice_speaker_profile_id = request.headers.get('PersonalVoiceSpeakerProfileId')
-        
-        # Avatar 연결
         remote_sdp = avatar_service.connect_avatar(
             client_context=client_context,
             local_sdp=local_sdp,
@@ -132,16 +121,12 @@ def connectAvatar() -> Response:
             custom_voice_endpoint_id=custom_voice_endpoint_id,
             personal_voice_speaker_profile_id=personal_voice_speaker_profile_id
         )
-        
-        # WebSocket 이벤트 전송
         if config.enable_websockets:
             socketio.emit("response", {
                 'path': 'api.event', 
                 'eventType': 'SPEECH_SYNTHESIZER_CONNECTED'
             }, room=client_id)
-        
         return Response(remote_sdp, status=200)
-        
     except Exception as e:
         return Response(f"Avatar connection failed. Error message: {e}", status=400)
 
@@ -151,14 +136,10 @@ def connectSTT() -> Response:
     client_id = uuid.UUID(request.headers.get('ClientId'))
     system_prompt = request.headers.get('SystemPrompt')
     client_context = client_manager.get_client_context(client_id)
-    
     try:
-        # STT 연결 함수 정의
         def speak_with_queue_wrapper(text, ending_silence_ms, target_client_id):
             target_context = client_manager.get_client_context(target_client_id)
             avatar_service.speak_with_queue(text, ending_silence_ms, target_context, target_client_id)
-        
-        # STT 연결
         stt_service.connect_stt(
             client_context=client_context,
             system_prompt=system_prompt,
@@ -169,9 +150,7 @@ def connectSTT() -> Response:
             vad_iterator=vad_service.get_vad_iterator(),
             stop_speaking_func=avatar_service.stop_speaking
         )
-        
         return Response(status=200)
-        
     except Exception as e:
         return Response(f"STT connection failed. Error message: {e}", status=400)
 
@@ -211,18 +190,14 @@ def stopSpeaking() -> Response:
 def chat() -> Response:
     client_id = uuid.UUID(request.headers.get('ClientId'))
     client_context = client_manager.get_client_context(client_id)
-    
     chat_initiated = client_context.get('chat_initiated', False)
     if not chat_initiated:
         chat_service.initialize_chat_context(request.headers.get('SystemPrompt'), client_id)
         client_context['chat_initiated'] = True
-    
     user_query = request.data.decode('utf-8')
-    
     def speak_with_queue_wrapper(text, ending_silence_ms, target_client_id):
         target_context = client_manager.get_client_context(target_client_id)
         avatar_service.speak_with_queue(text, ending_silence_ms, target_context, target_client_id)
-    
     return Response(
         chat_service.handle_user_query(user_query, client_id, speak_with_queue_wrapper), 
         mimetype='text/plain', 
@@ -236,13 +211,10 @@ def continueSpeaking() -> Response:
     client_context = client_manager.get_client_context(client_id)
     spoken_text_queue = client_context.get('spoken_text_queue', [])
     speaking_text = client_context.get('speaking_text')
-    
     if speaking_text and config.repeat_speaking_sentence_after_reconnection:
         spoken_text_queue.insert(0, speaking_text)
-    
     if len(spoken_text_queue) > 0:
         avatar_service.speak_with_queue(None, 0, client_context, client_id)
-    
     return Response('Request sent.', status=200)
 
 
@@ -292,4 +264,4 @@ def handleWsMessage(message):
 
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True)
+    socketio.run(app, debug=True, port=5001)
