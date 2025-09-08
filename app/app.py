@@ -14,8 +14,8 @@ import traceback
 import uuid
 from flask import Flask, Response, render_template, request
 from flask_socketio import SocketIO, join_room
-from vad_iterator import VADIterator, int2float
-from chat_service import chat_service
+from util.vad_iterator import VADIterator, int2float
+from service.chat_service import chat_service
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
