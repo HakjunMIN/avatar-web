@@ -90,7 +90,6 @@ class AvatarService:
                       transparent_background: bool = False, video_crop: bool = False,
                       tts_voice: str = None, custom_voice_endpoint_id: str = None,
                       personal_voice_speaker_profile_id: str = None) -> str:
-        """Avatar 연결"""
         try:
             if self.enable_token_auth:
                 while not self.speech_token:
