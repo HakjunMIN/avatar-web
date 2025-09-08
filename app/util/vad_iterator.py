@@ -130,3 +130,33 @@ def float2int(sound):
     sound *= 32768
     sound = np.clip(sound, -32768, 32767)
     return sound.astype("int16")
+
+
+class VADService:
+    def __init__(self, enable_vad: bool = False, threshold: float = 0.5, 
+                 sampling_rate: int = 16000, min_silence_duration_ms: int = 150, 
+                 speech_pad_ms: int = 100):
+        self.enable_vad = enable_vad
+        self.vad_iterator = None
+        
+        if enable_vad:
+            try:
+                import torch
+                vad_model, _ = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
+                self.vad_iterator = VADIterator(
+                    model=vad_model, 
+                    threshold=threshold,
+                    sampling_rate=sampling_rate, 
+                    min_silence_duration_ms=min_silence_duration_ms, 
+                    speech_pad_ms=speech_pad_ms
+                )
+                print("VAD service initialized successfully")
+            except Exception as e:
+                print(f"Failed to initialize VAD service: {e}")
+                self.enable_vad = False
+    
+    def get_vad_iterator(self):
+        return self.vad_iterator
+    
+    def is_enabled(self) -> bool:
+        return self.enable_vad and self.vad_iterator is not None
