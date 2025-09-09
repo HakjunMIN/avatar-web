@@ -37,6 +37,7 @@ env/
 # Environment variables
 .env
 
+app/.temp
 # OS
 .DS_Store
 .DS_Store?
