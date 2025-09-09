@@ -16,6 +16,9 @@ dependencies = [
     "numpy",
     "torchaudio>=2.6.0",
     "python-dotenv",
+    "diagrams",
+    "graphviz",
+    "pillow",
 ]
 
 [tool.uv]

@@ -2,7 +2,9 @@ import json
 import time
 import traceback
 import uuid
-from flask import Flask, Response, render_template, request
+import os
+import urllib.parse
+from flask import Flask, Response, render_template, request, send_file
 from flask_socketio import SocketIO
 
 from service.config_service import ConfigService
@@ -251,6 +253,23 @@ def releaseClient() -> Response:
     except Exception as e:
         print(f"Client context release failed. Error message: {e}")
         return Response(f"Client context release failed. Error message: {e}", status=400)
+
+@app.route("/api/diagram/<path:diagram_path>", methods=["GET"])
+def serveDiagram(diagram_path):
+    """다이어그램 파일을 서빙하는 엔드포인트"""
+    try:
+        # URL 디코딩
+        decoded_path = urllib.parse.unquote(diagram_path)
+        
+        # 파일 존재 여부 확인
+        if not os.path.exists(decoded_path):
+            return Response('Diagram file not found.', status=404)
+        
+        # 파일 전송
+        return send_file(decoded_path, mimetype='image/png')
+    except Exception as e:
+        print(f"Error serving diagram: {e}")
+        return Response(f"Error serving diagram: {e}", status=500)
 
 
 @socketio.on("connect")

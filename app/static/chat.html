@@ -34,7 +34,7 @@
             <label for="azureOpenAIDeploymentName">Azure OpenAI Deployment Name:</label>
             <input id="azureOpenAIDeploymentName" value="gpt-4.1-mini" type="text" />
             <label for="prompt">System Prompt:</label>
-            <textarea id="prompt">You are an AI assistant that helps people find information. You MUST speak in Korean.</textarea>
+            <textarea id="prompt">You are an AI assistant that helps people find information. You MUST speak in Korean. When responding, make sure to output \n appropriately. Since this will be used for TTS speech, avoid using Markdown and respond in a friendly, conversational tone.</textarea>
             <div>
                 <input type="checkbox" id="enableOyd" onchange="window.updataEnableOyd()">
                 <label for="enableOyd">Enable On Your Data</label>
@@ -140,7 +140,7 @@
                             </div>
                         </div>
                         <div class="chat-history-container">
-                            <textarea id="chatHistory" class="chat-history" readonly hidden></textarea>
+                            <div id="chatHistory" class="chat-history" contenteditable="false" hidden></div>
                         </div>
                         <div class="message-input-container">
                             <textarea id="userMessageBox" class="message-input" placeholder="Type your message here..." hidden></textarea>

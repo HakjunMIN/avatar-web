@@ -300,6 +300,10 @@ body {
     flex: 1;
     display: flex;
     flex-direction: column;
+    /* Fixed height to prevent size changes */
+    height: 500px;
+    max-height: 500px;
+    min-height: 500px;
 }
 
 .chat-header {
@@ -382,6 +386,13 @@ body {
     flex: 1;
     padding: 1rem;
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    /* Fixed height to prevent expansion */
+    height: calc(100% - 120px); /* Subtract header and input areas */
+    max-height: calc(100% - 120px);
+    min-height: calc(100% - 120px);
 }
 
 .chat-history {
@@ -395,6 +406,27 @@ body {
     font-size: 0.875rem;
     line-height: 1.5;
     color: var(--text-primary);
+    overflow-y: auto;
+    /* Prevent content from expanding the container */
+    max-height: 100%;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+/* Special handling for diagram content in chat history */
+.chat-history .diagram-container {
+    margin: 15px 0;
+    text-align: center;
+    /* Limit diagram size to prevent chat expansion */
+    max-width: 100%;
+    max-height: 300px;
+    overflow: hidden;
+}
+
+.chat-history .diagram-container img {
+    max-width: 100%;
+    max-height: 250px;
+    object-fit: contain;
 }
 
 .message-input-container {
@@ -854,4 +886,94 @@ input:checked + .slider:before {
     vertical-align: middle;
     position: relative;
     margin-top: 5px;
+}
+
+/* Architecture Diagram Styles */
+.diagram-container {
+    margin: 10px 0;
+    padding: 15px;
+    border: 2px solid var(--primary-color);
+    border-radius: var(--border-radius);
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    box-shadow: var(--shadow-lg);
+    text-align: center;
+    transition: var(--transition);
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.diagram-container:hover {
+    box-shadow: 0 1rem 2rem rgba(0, 120, 212, 0.2);
+    transform: translateY(-2px);
+}
+
+.diagram-container h3 {
+    color: var(--primary-color);
+    margin-bottom: 15px;
+    font-size: 1.2rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.diagram-container img {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    box-shadow: var(--shadow);
+    background-color: white;
+    padding: 10px;
+    transition: var(--transition);
+}
+
+.diagram-container img:hover {
+    transform: scale(1.02);
+    box-shadow: var(--shadow-lg);
+}
+
+.diagram-download-link {
+    display: inline-block;
+    margin-top: 15px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-hover) 100%);
+    color: white;
+    text-decoration: none;
+    border-radius: var(--border-radius-sm);
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: var(--transition);
+    box-shadow: var(--shadow-sm);
+}
+
+.diagram-download-link:hover {
+    background: linear-gradient(135deg, var(--primary-hover) 0%, #0e5a94 100%);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
+    color: white;
+    text-decoration: none;
+}
+
+.diagram-error {
+    color: var(--danger-color);
+    font-style: italic;
+    margin: 10px 0;
+}
+
+/* Animation for diagram loading */
+@keyframes diagramFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.diagram-container {
+    animation: diagramFadeIn 0.5s ease-out;
 }

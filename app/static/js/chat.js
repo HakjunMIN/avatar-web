@@ -27,8 +27,164 @@ var isFirstRecognizingEvent = true
 var sttLatencyRegex = new RegExp(/<STTL>(\d+)<\/STTL>/)
 var firstTokenLatencyRegex = new RegExp(/<FTL>(\d+)<\/FTL>/)
 var firstSentenceLatencyRegex = new RegExp(/<FSL>(\d+)<\/FSL>/)
+var diagramRegex = new RegExp(/<DIAGRAM>(.*?)<\/DIAGRAM>/)
 // Timestamp (ms) of last typed submission to suppress duplicate STT handling
 var lastTypeSubmitTime = 0
+// Global buffer for streaming chunks
+var streamBuffer = ''
+
+// Function to process buffered content and extract complete tags
+function processStreamBuffer(newChunk) {
+    streamBuffer += newChunk
+    let processedText = ''
+    let remainingBuffer = streamBuffer
+    
+    // Process complete diagram tags
+    let diagramMatch
+    while ((diagramMatch = diagramRegex.exec(remainingBuffer)) !== null) {
+        // Extract text before the diagram
+        let beforeDiagram = remainingBuffer.substring(0, diagramMatch.index)
+        processedText += beforeDiagram
+        
+        // Process the diagram
+        let diagramPath = diagramMatch[1]
+        console.log(`Architecture diagram received: ${diagramPath}`)
+        displayArchitectureDiagram(diagramPath)
+        
+        // Update remaining buffer (text after the diagram tag)
+        remainingBuffer = remainingBuffer.substring(diagramMatch.index + diagramMatch[0].length)
+        // Reset regex lastIndex for next iteration
+        diagramRegex.lastIndex = 0
+    }
+    
+    // Check if there might be an incomplete tag at the end
+    let incompleteTagStart = remainingBuffer.lastIndexOf('<')
+    if (incompleteTagStart !== -1) {
+        let potentialTag = remainingBuffer.substring(incompleteTagStart)
+        if (potentialTag.includes('DIAGRAM') || potentialTag.includes('FTL') || potentialTag.includes('FSL') || potentialTag.includes('STTL')) {
+            // Keep potential incomplete tag in buffer
+            processedText += remainingBuffer.substring(0, incompleteTagStart)
+            streamBuffer = remainingBuffer.substring(incompleteTagStart)
+        } else {
+            // Not a tag we care about, process everything
+            processedText += remainingBuffer
+            streamBuffer = ''
+        }
+    } else {
+        // No potential incomplete tag, process everything
+        processedText += remainingBuffer
+        streamBuffer = ''
+    }
+    
+    return processedText
+}
+
+// Function to clear stream buffer (call when response is complete)
+function clearStreamBuffer() {
+    let finalText = streamBuffer
+    streamBuffer = ''
+    return finalText
+}
+
+// Function to display architecture diagram
+function displayArchitectureDiagram(diagramPath) {
+    console.log(`[displayArchitectureDiagram] Starting to display diagram: ${diagramPath}`)
+    let chatHistoryDiv = document.getElementById('chatHistory')
+    
+    if (!chatHistoryDiv) {
+        console.error('[displayArchitectureDiagram] chatHistory div not found!')
+        return
+    }
+    
+    // Ensure chat history is visible and properly styled for diagrams
+    if (chatHistoryDiv) {
+        chatHistoryDiv.hidden = false
+        chatHistoryDiv.style.display = 'block'
+        console.log('[displayArchitectureDiagram] chatHistory div made visible')
+    }
+    
+    // Create diagram container
+    let diagramContainer = document.createElement('div')
+    diagramContainer.className = 'diagram-container'
+    diagramContainer.style.margin = '10px 0'
+    diagramContainer.style.padding = '10px'
+    diagramContainer.style.border = '1px solid #ddd'
+    diagramContainer.style.borderRadius = '8px'
+    diagramContainer.style.backgroundColor = '#f9f9f9'
+    
+    // Create diagram title
+    let diagramTitle = document.createElement('h3')
+    diagramTitle.innerHTML = '🔧 Azure Architecture Diagram'
+    diagramTitle.style.margin = '0 0 10px 0'
+    diagramTitle.style.color = '#333'
+    
+    // Create image element
+    let diagramImg = document.createElement('img')
+    diagramImg.src = `/api/diagram/${encodeURIComponent(diagramPath)}`
+    diagramImg.alt = 'Azure Architecture Diagram'
+    diagramImg.style.maxWidth = '100%'
+    diagramImg.style.maxHeight = '250px'
+    diagramImg.style.height = 'auto'
+    diagramImg.style.display = 'block'
+    diagramImg.style.margin = '0 auto'
+    diagramImg.style.border = '1px solid #ccc'
+    diagramImg.style.borderRadius = '4px'
+    diagramImg.style.objectFit = 'contain'
+    
+    // Add loading message
+    let loadingMsg = document.createElement('p')
+    loadingMsg.textContent = '다이어그램 로딩 중...'
+    loadingMsg.className = 'diagram-loading'
+    loadingMsg.style.textAlign = 'center'
+    loadingMsg.style.color = '#666'
+    diagramContainer.appendChild(loadingMsg)
+    
+    // Add error handling for image loading
+    diagramImg.onerror = function() {
+        this.style.display = 'none'
+        loadingMsg.textContent = '다이어그램을 로드할 수 없습니다.'
+        loadingMsg.className = 'diagram-error'
+        loadingMsg.style.color = '#e74c3c'
+    }
+    
+    // Add success handling for image loading
+    diagramImg.onload = function() {
+        if (loadingMsg.parentNode) {
+            loadingMsg.remove()
+        }
+    }
+    
+    // Create download link
+    let downloadLink = document.createElement('a')
+    downloadLink.href = `/api/diagram/${encodeURIComponent(diagramPath)}`
+    downloadLink.download = 'azure_architecture_diagram.png'
+    downloadLink.textContent = '📥 다이어그램 다운로드'
+    downloadLink.className = 'diagram-download-link'
+    downloadLink.style.display = 'inline-block'
+    downloadLink.style.marginTop = '10px'
+    downloadLink.style.padding = '5px 10px'
+    downloadLink.style.backgroundColor = '#007acc'
+    downloadLink.style.color = 'white'
+    downloadLink.style.textDecoration = 'none'
+    downloadLink.style.borderRadius = '4px'
+    downloadLink.style.fontSize = '14px'
+    
+    // Assemble the diagram container
+    diagramContainer.appendChild(diagramTitle)
+    diagramContainer.appendChild(diagramImg)
+    diagramContainer.appendChild(document.createElement('br'))
+    diagramContainer.appendChild(downloadLink)
+
+    // Insert diagram directly into chatHistory div
+    if (chatHistoryDiv) {
+        chatHistoryDiv.appendChild(diagramContainer)
+        chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight
+        console.log('[displayArchitectureDiagram] Diagram container added to chatHistory')
+        console.log(`[displayArchitectureDiagram] chatHistory now has ${chatHistoryDiv.children.length} child elements`)
+    } else {
+        console.error('[displayArchitectureDiagram] Failed to append diagram - chatHistory div is null')
+    }
+}
 
 // Fetch ICE token from the server
 function fetchIceToken() {
@@ -161,12 +317,16 @@ function setupWebSocket() {
                 chunkString = chunkString.replace(firstSentenceLatencyRegex, '')
             }
 
-            chatHistoryTextArea.innerHTML += `${chunkString}`
-            if (chatHistoryTextArea.innerHTML.startsWith('\n\n')) {
-                chatHistoryTextArea.innerHTML = chatHistoryTextArea.innerHTML.substring(2)
-            }
+            // Use buffering for diagram processing
+            let processedText = processStreamBuffer(chunkString)
 
-            chatHistoryTextArea.scrollTop = chatHistoryTextArea.scrollHeight
+            if (processedText.trim()) {
+                let chatHistoryDiv = document.getElementById('chatHistory')
+                // Use textContent to preserve existing DOM elements (like diagrams)
+                let textNode = document.createTextNode(processedText)
+                chatHistoryDiv.appendChild(textNode)
+                chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight
+            }
         } else if (path === 'api.event') {
             console.log("[" + (new Date()).toISOString() + "] WebSocket event received: " + data.eventType)
             if (data.eventType === 'SPEECH_SYNTHESIZER_DISCONNECTED') {
@@ -447,7 +607,8 @@ function handleUserQuery(userQuery) {
         }
 
         let chatHistoryTextArea = document.getElementById('chatHistory')
-        chatHistoryTextArea.innerHTML += 'Assistant: '
+        let assistantLabel = document.createTextNode('Assistant: ')
+        chatHistoryTextArea.appendChild(assistantLabel)
 
         const reader = response.body.getReader()
 
@@ -456,7 +617,13 @@ function handleUserQuery(userQuery) {
             return reader.read().then(({ value, done }) => {
                 // Check if there is still data to read
                 if (done) {
-                    // Stream complete
+                    // Stream complete - process any remaining buffer
+                    let finalText = clearStreamBuffer()
+                    if (finalText.trim()) {
+                        let textNode = document.createTextNode(finalText)
+                        chatHistoryTextArea.appendChild(textNode)
+                        chatHistoryTextArea.scrollTop = chatHistoryTextArea.scrollHeight
+                    }
                     return
                 }
 
@@ -489,8 +656,14 @@ function handleUserQuery(userQuery) {
                     }
                 }
 
-                chatHistoryTextArea.innerHTML += `${chunkString}`
-                chatHistoryTextArea.scrollTop = chatHistoryTextArea.scrollHeight
+                // Use buffering for diagram processing
+                let processedText = processStreamBuffer(chunkString)
+
+                if (processedText.trim()) {
+                    let textNode = document.createTextNode(processedText)
+                    chatHistoryTextArea.appendChild(textNode)
+                    chatHistoryTextArea.scrollTop = chatHistoryTextArea.scrollHeight
+                }
 
                 // Continue reading the next chunk
                 return read()
@@ -694,6 +867,9 @@ window.stopSession = () => {
 
 window.clearChatHistory = () => {
     lastInteractionTime = new Date()
+    // Clear stream buffer
+    streamBuffer = ''
+    
     fetch('/api/chat/clearHistory', {
         method: 'POST',
         headers: {
@@ -704,7 +880,11 @@ window.clearChatHistory = () => {
     })
     .then(response => {
         if (response.ok) {
-            document.getElementById('chatHistory').innerHTML = ''
+            // Clear all child nodes from chatHistory to properly remove diagrams and text
+            let chatHistoryDiv = document.getElementById('chatHistory')
+            while (chatHistoryDiv.firstChild) {
+                chatHistoryDiv.removeChild(chatHistoryDiv.firstChild)
+            }
             document.getElementById('latencyLog').innerHTML = ''
         } else {
             throw new Error(`Failed to clear chat history: ${response.status} ${response.statusText}`)
@@ -898,11 +1078,14 @@ window.microphone = () => {
             }
 
             let chatHistoryTextArea = document.getElementById('chatHistory')
-            if (chatHistoryTextArea.innerHTML !== '' && !chatHistoryTextArea.innerHTML.endsWith('\n\n')) {
-                chatHistoryTextArea.innerHTML += '\n\n'
+            // Add spacing and user query using DOM manipulation to preserve diagrams
+            if (chatHistoryTextArea.childNodes.length > 0) {
+                let lineBreak1 = document.createTextNode('\n\n')
+                chatHistoryTextArea.appendChild(lineBreak1)
             }
 
-            chatHistoryTextArea.innerHTML += userQuery + '\n\n'
+            let userText = document.createTextNode(userQuery + '\n\n')
+            chatHistoryTextArea.appendChild(userText)
             chatHistoryTextArea.scrollTop = chatHistoryTextArea.scrollHeight
 
             handleUserQuery(userQuery)
@@ -941,11 +1124,14 @@ window.updateTypeMessageBox = () => {
         if (userQuery === '') return
 
         let chatHistoryTextArea = document.getElementById('chatHistory')
-        if (chatHistoryTextArea.innerHTML !== '' && !chatHistoryTextArea.innerHTML.endsWith('\n\n')) {
-            chatHistoryTextArea.innerHTML += '\n\n'
+        // Add spacing and user query using DOM manipulation to preserve diagrams
+        if (chatHistoryTextArea.childNodes.length > 0) {
+            let lineBreak1 = document.createTextNode('\n\n')
+            chatHistoryTextArea.appendChild(lineBreak1)
         }
 
-        chatHistoryTextArea.innerHTML += userQuery + '\n\n'
+        let userText = document.createTextNode(userQuery + '\n\n')
+        chatHistoryTextArea.appendChild(userText)
         chatHistoryTextArea.scrollTop = chatHistoryTextArea.scrollHeight
 
         if (isSpeaking) {
