@@ -17,4 +17,4 @@ RUN uv sync --frozen --no-dev
 # Copy application code
 COPY . /app
 
-ENTRYPOINT [ "uv", "run", "python", "-m", "flask", "run", "-h", "0.0.0.0", "-p", "5000" ]
+ENTRYPOINT [ "uv", "run", "python", "-m", "flask", "run", "-h", "0.0.0.0", "-p", "5001" ]
