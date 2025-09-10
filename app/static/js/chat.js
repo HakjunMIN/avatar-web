@@ -182,6 +182,7 @@ function processStreamBuffer(newChunk) {
         displayArchitectureDiagram(diagramPath)
         
         // Update remaining buffer (text after the diagram tag)
+        // 다이어그램 태그는 텍스트에서 완전히 제거
         remainingBuffer = remainingBuffer.substring(diagramMatch.index + diagramMatch[0].length)
         // Reset regex lastIndex for next iteration
         diagramRegex.lastIndex = 0
@@ -224,6 +225,15 @@ function displayArchitectureDiagram(diagramPath) {
     if (!chatHistoryDiv) {
         console.error('[displayArchitectureDiagram] chatHistory div not found!')
         return
+    }
+    
+    // 이미 같은 다이어그램이 표시되어 있는지 확인
+    const existingDiagrams = chatHistoryDiv.querySelectorAll('.diagram-message img')
+    for (let img of existingDiagrams) {
+        if (img.src.includes(encodeURIComponent(diagramPath))) {
+            console.log('[displayArchitectureDiagram] Diagram already exists, skipping duplicate')
+            return
+        }
     }
     
     // Ensure chat history is visible
@@ -504,7 +514,11 @@ function setupWebSocket() {
                 
                 if (currentAssistantMessage) {
                     const messageContent = currentAssistantMessage.querySelector('.message-content')
-                    messageContent.textContent += processedText
+                    // 실시간 업데이트에서도 다이어그램 태그 제거
+                    let currentText = messageContent.textContent
+                    let newText = currentText + processedText
+                    let cleanedText = newText.replace(/<DIAGRAM>.*?<\/DIAGRAM>/g, '')
+                    messageContent.textContent = cleanedText
                     
                     // Scroll to bottom
                     const chatHistory = document.getElementById('chatHistory')
@@ -520,7 +534,9 @@ function setupWebSocket() {
                 wsResponseTimer = setTimeout(() => {
                     if (currentAssistantMessage) {
                         const messageContent = currentAssistantMessage.querySelector('.message-content')
-                        messageContent.innerHTML = marked.parse(completeWsResponse)
+                        // 다이어그램 태그를 완전히 제거한 후 마크다운 파싱
+                        let cleanedResponse = completeWsResponse.replace(/<DIAGRAM>.*?<\/DIAGRAM>/g, '')
+                        messageContent.innerHTML = marked.parse(cleanedResponse)
                         if (typeof Prism !== 'undefined') {
                             Prism.highlightAllUnder(messageContent)
                         }
@@ -1103,10 +1119,16 @@ window.stopSession = () => {
 
 window.clearChatHistory = () => {
     lastInteractionTime = new Date()
-    // Clear stream buffer
+    // Clear stream buffer and response
     streamBuffer = ''
+    completeWsResponse = ''
     // Reset current assistant message
     currentAssistantMessage = null
+    // Clear any pending timers
+    if (wsResponseTimer) {
+        clearTimeout(wsResponseTimer)
+        wsResponseTimer = null
+    }
     
     fetch('/api/chat/clearHistory', {
         method: 'POST',
