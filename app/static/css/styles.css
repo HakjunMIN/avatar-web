@@ -476,6 +476,7 @@ body {
     background: var(--primary-color);
     color: white;
     border-bottom-right-radius: 0.25rem;
+    max-width: 80%;
 }
 
 .chat-message.assistant .message-content {
@@ -483,6 +484,8 @@ body {
     color: var(--text-primary);
     border: 1px solid var(--border-color);
     border-bottom-left-radius: 0.25rem;
+    max-width: 100%;
+    width: 100%;
 }
 
 .message-timestamp {
@@ -664,7 +667,8 @@ body {
 }
 
 .chat-message.diagram-message .message-content {
-    max-width: 95%;
+    max-width: 100%;
+    width: 100%;
 }
 
 .diagram-download-link:hover {

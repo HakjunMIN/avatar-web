@@ -207,7 +207,6 @@ class ArchitectureDiagramService:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.3
             )
             
             logger.debug("OpenAI API call completed")
@@ -389,7 +388,6 @@ class ArchitectureDiagramService:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.5
             )
             
             return response.choices[0].message.content

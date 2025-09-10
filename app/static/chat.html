@@ -38,7 +38,7 @@
             <label for="azureOpenAIDeploymentName">Azure OpenAI Deployment Name:</label>
             <input id="azureOpenAIDeploymentName" value="gpt-4.1-mini" type="text" />
             <label for="prompt">System Prompt:</label>
-            <textarea id="prompt">You are an AI assistant that helps people find information. You MUST speak in Korean. When responding, make sure to output \n appropriately. Since this will be used for TTS speech, respond in a friendly, conversational tone.</textarea>
+            <textarea id="prompt">You are an Azure Cloud Architecture Expert. When receiving architecture requirements, call the generate_architecture_diagram function as much as possible. You MUST speak in Korean. When responding, make sure to output \n appropriately. Since this will be used for TTS speech, respond in a friendly, conversational tone.</textarea>
             <div>
                 <input type="checkbox" id="enableOyd" onchange="window.updataEnableOyd()">
                 <label for="enableOyd">Enable On Your Data</label>
@@ -137,7 +137,7 @@
                             <h3><i class="fas fa-comments"></i> Conversation</h3>
                             <div class="chat-controls">
                                 <label class="toggle-switch">
-                                    <input type="checkbox" id="showTypeMessage" onchange="window.updateTypeMessageBox()">
+                                    <input type="checkbox" id="showTypeMessage" onchange="window.updateTypeMessageBox()" checked>
                                     <span class="slider"></span>
                                     <span class="label">Type Mode</span>
                                 </label>
@@ -149,7 +149,7 @@
                             </div>
                         </div>
                         <div class="message-input-container">
-                            <textarea id="userMessageBox" class="message-input" placeholder="Type your message here..." hidden></textarea>
+                            <textarea id="userMessageBox" class="message-input" placeholder="Type your message here..."></textarea>
                         </div>
                     </div>
 

@@ -14,7 +14,7 @@ from service.avatar_service import AvatarService
 from service.stt_service import STTService
 from service.chat_service import chat_service
 from util.vad_iterator import VADService
-from service.websocket_handler import WebSocketHandler
+from handler.websocket_handler import WebSocketHandler
 
 # 로거 설정
 logging.basicConfig(

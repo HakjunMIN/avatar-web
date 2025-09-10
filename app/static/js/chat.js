@@ -268,14 +268,22 @@ function displayArchitectureDiagram(diagramPath) {
     // Create message content with diagram
     const messageContent = document.createElement('div')
     messageContent.className = 'message-content'
-    messageContent.style.maxWidth = '90%'
+    messageContent.style.maxWidth = '100%'
+    messageContent.style.width = '100%'
     messageContent.style.padding = '1rem'
     
     // Create diagram container
     let diagramContainer = document.createElement('div')
     diagramContainer.className = 'diagram-container'
     diagramContainer.style.margin = '0'
+    diagramContainer.style.width = '100%'
+    diagramContainer.style.maxHeight = '600px'
+    diagramContainer.style.overflowY = 'auto'
+    diagramContainer.style.overflowX = 'auto'
     diagramContainer.style.textAlign = 'center'
+    diagramContainer.style.border = '1px solid var(--border-color)'
+    diagramContainer.style.borderRadius = 'var(--border-radius-sm)'
+    diagramContainer.style.padding = '0.5rem'
     
     // Create diagram title
     let diagramTitle = document.createElement('h3')
@@ -289,8 +297,8 @@ function displayArchitectureDiagram(diagramPath) {
     let diagramImg = document.createElement('img')
     diagramImg.src = `/api/diagram/${encodeURIComponent(diagramPath)}`
     diagramImg.alt = 'Azure Architecture Diagram'
+    diagramImg.style.width = '100%'
     diagramImg.style.maxWidth = '100%'
-    diagramImg.style.maxHeight = '300px'
     diagramImg.style.height = 'auto'
     diagramImg.style.display = 'block'
     diagramImg.style.margin = '0 auto'
@@ -298,6 +306,7 @@ function displayArchitectureDiagram(diagramPath) {
     diagramImg.style.borderRadius = 'var(--border-radius-sm)'
     diagramImg.style.objectFit = 'contain'
     diagramImg.style.backgroundColor = '#ffffff'
+    diagramImg.style.cursor = 'zoom-in'
     
     // Add loading message
     let loadingMsg = document.createElement('p')
@@ -320,6 +329,21 @@ function displayArchitectureDiagram(diagramPath) {
     diagramImg.onload = function() {
         if (loadingMsg.parentNode) {
             loadingMsg.remove()
+        }
+    }
+    
+    // Add click to zoom functionality
+    diagramImg.onclick = function() {
+        if (this.style.width === '100%') {
+            this.style.width = 'auto'
+            this.style.maxWidth = 'none'
+            this.style.cursor = 'zoom-out'
+            diagramContainer.style.textAlign = 'left'
+        } else {
+            this.style.width = '100%'
+            this.style.maxWidth = '100%'
+            this.style.cursor = 'zoom-in'
+            diagramContainer.style.textAlign = 'center'
         }
     }
     
