@@ -10,12 +10,13 @@ try:
     from diagrams.azure.compute import AppServices, FunctionApps, ContainerInstances, VM, ContainerApps, KubernetesServices   
     from diagrams.azure.database import DatabaseForPostgresqlServers, CosmosDb, SQLDatabases
     from diagrams.azure.storage import StorageAccounts, BlobStorage
-    from diagrams.azure.network import LoadBalancers, ApplicationGateway, CDNProfiles, VirtualNetworks, Subnets
+    from diagrams.azure.network import LoadBalancers, ApplicationGateway, CDNProfiles, VirtualNetworks, Subnets, Firewall, FrontDoors
+    
     from diagrams.azure.integration import ServiceBus, LogicApps, APIManagement
     from diagrams.azure.analytics import SynapseAnalytics, DataFactories, EventHubs
     from diagrams.azure.ml import MachineLearningServiceWorkspaces, CognitiveServices, AzureOpenAI as OpenAI
     from diagrams.azure.monitor import Monitor
-    from diagrams.azure.security import KeyVaults, SecurityCenter
+    from diagrams.azure.security import KeyVaults, SecurityCenter, ApplicationSecurityGroups
     from diagrams.azure.devops import Devops
     from diagrams.onprem.client import Users
     DIAGRAMS_AVAILABLE = True
@@ -56,6 +57,9 @@ class ArchitectureDiagramService:
             'load_balancer': LoadBalancers,
             'application_gateway': ApplicationGateway,
             'cdn': CDNProfiles,
+            'firewall': Firewall,
+            'front_door': FrontDoors,
+            'application_security_group': ApplicationSecurityGroups,
             'virtual_network': VirtualNetworks,
             'subnet': Subnets,
             'api_management': APIManagement,
@@ -124,6 +128,7 @@ class ArchitectureDiagramService:
                 'success': False,
                 'error': str(e),
                 'diagram_path': None,
+                'structure': None,
                 'description': None
             }
     
@@ -149,6 +154,10 @@ class ArchitectureDiagramService:
         - application_gateway: Azure Application Gateway
         - cdn: Azure CDN
         - virtual_network: Azure Virtual Network
+        - subnet: Azure Subnet
+        - firewall: Azure Firewall
+        - front_door: Azure Front Door
+        - application_security_group: Azure Application Security Group
         - api_management: Azure API Management
         - service_bus: Azure Service Bus
         - event_hubs: Azure Event Hubs

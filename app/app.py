@@ -16,7 +16,6 @@ from service.chat_service import chat_service
 from util.vad_iterator import VADService
 from handler.websocket_handler import WebSocketHandler
 
-# 로거 설정
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',

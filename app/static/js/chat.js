@@ -28,6 +28,7 @@ var sttLatencyRegex = new RegExp(/<STTL>(\d+)<\/STTL>/)
 var firstTokenLatencyRegex = new RegExp(/<FTL>(\d+)<\/FTL>/)
 var firstSentenceLatencyRegex = new RegExp(/<FSL>(\d+)<\/FSL>/)
 var diagramRegex = new RegExp(/<DIAGRAM>(.*?)<\/DIAGRAM>/)
+var structureRegex = new RegExp(/<STRUCTURE>(.*?)<\/STRUCTURE>/s)
 // Timestamp (ms) of last typed submission to suppress duplicate STT handling
 var lastTypeSubmitTime = 0
 // Global buffer for streaming chunks
@@ -188,11 +189,31 @@ function processStreamBuffer(newChunk) {
         diagramRegex.lastIndex = 0
     }
     
+    // Process complete structure tags
+    structureRegex.lastIndex = 0 // Reset regex index
+    let structureMatch
+    while ((structureMatch = structureRegex.exec(remainingBuffer)) !== null) {
+        // Extract text before the structure
+        let beforeStructure = remainingBuffer.substring(0, structureMatch.index)
+        processedText += beforeStructure
+        
+        // Process the structure JSON
+        let structureJson = structureMatch[1]
+        console.log(`Structure JSON received:`, structureJson)
+        updateStructureJson(structureJson)
+        
+        // Update remaining buffer (text after the structure tag)
+        // 스트럭처 태그는 텍스트에서 완전히 제거
+        remainingBuffer = remainingBuffer.substring(structureMatch.index + structureMatch[0].length)
+        // Reset regex lastIndex for next iteration
+        structureRegex.lastIndex = 0
+    }
+    
     // Check if there might be an incomplete tag at the end
     let incompleteTagStart = remainingBuffer.lastIndexOf('<')
     if (incompleteTagStart !== -1) {
         let potentialTag = remainingBuffer.substring(incompleteTagStart)
-        if (potentialTag.includes('DIAGRAM') || potentialTag.includes('FTL') || potentialTag.includes('FSL') || potentialTag.includes('STTL')) {
+        if (potentialTag.includes('DIAGRAM') || potentialTag.includes('STRUCTURE') || potentialTag.includes('FTL') || potentialTag.includes('FSL') || potentialTag.includes('STTL')) {
             // Keep potential incomplete tag in buffer
             processedText += remainingBuffer.substring(0, incompleteTagStart)
             streamBuffer = remainingBuffer.substring(incompleteTagStart)
@@ -208,6 +229,45 @@ function processStreamBuffer(newChunk) {
     }
     
     return processedText
+}
+
+// Function to update structure JSON in textarea
+function updateStructureJson(structureData) {
+    console.log('updateStructureJson called with data:', structureData)
+    
+    const structureTextarea = document.getElementById('structureJson')
+    if (!structureTextarea) {
+        console.error('structureJson textarea not found in DOM')
+        return
+    }
+    
+    try {
+        // Parse JSON to validate and format it
+        let parsedJson = JSON.parse(structureData.trim())
+        let formattedJson = JSON.stringify(parsedJson, null, 2)
+        
+        structureTextarea.value = formattedJson
+        console.log('Structure JSON successfully updated in textarea:', formattedJson)
+        
+        // Make the container visible if it was hidden
+        const structureContainer = document.getElementById('structureJsonContainer')
+        if (structureContainer) {
+            structureContainer.style.display = 'block'
+            console.log('Structure JSON container made visible')
+        }
+        
+    } catch (error) {
+        console.error('Invalid JSON in STRUCTURE tag:', error, 'Raw data:', structureData)
+        // Still update textarea with raw data if JSON is invalid
+        structureTextarea.value = structureData.trim()
+        console.log('Updated textarea with raw structure data')
+        
+        // Make the container visible even with invalid JSON
+        const structureContainer = document.getElementById('structureJsonContainer')
+        if (structureContainer) {
+            structureContainer.style.display = 'block'
+        }
+    }
 }
 
 // Function to clear stream buffer (call when response is complete)
@@ -538,10 +598,10 @@ function setupWebSocket() {
                 
                 if (currentAssistantMessage) {
                     const messageContent = currentAssistantMessage.querySelector('.message-content')
-                    // 실시간 업데이트에서도 다이어그램 태그 제거
+                    // 실시간 업데이트에서도 다이어그램과 스트럭처 태그 제거
                     let currentText = messageContent.textContent
                     let newText = currentText + processedText
-                    let cleanedText = newText.replace(/<DIAGRAM>.*?<\/DIAGRAM>/g, '')
+                    let cleanedText = newText.replace(/<DIAGRAM>.*?<\/DIAGRAM>/g, '').replace(/<STRUCTURE>.*?<\/STRUCTURE>/gs, '')
                     messageContent.textContent = cleanedText
                     
                     // Scroll to bottom
@@ -558,8 +618,8 @@ function setupWebSocket() {
                 wsResponseTimer = setTimeout(() => {
                     if (currentAssistantMessage) {
                         const messageContent = currentAssistantMessage.querySelector('.message-content')
-                        // 다이어그램 태그를 완전히 제거한 후 마크다운 파싱
-                        let cleanedResponse = completeWsResponse.replace(/<DIAGRAM>.*?<\/DIAGRAM>/g, '')
+                        // 다이어그램과 스트럭처 태그를 완전히 제거한 후 마크다운 파싱
+                        let cleanedResponse = completeWsResponse.replace(/<DIAGRAM>[\s\S]*?<\/DIAGRAM>/g, '').replace(/<STRUCTURE>[\s\S]*?<\/STRUCTURE>/g, '')
                         messageContent.innerHTML = marked.parse(cleanedResponse)
                         if (typeof Prism !== 'undefined') {
                             Prism.highlightAllUnder(messageContent)
@@ -885,7 +945,9 @@ function handleUserQuery(userQuery) {
                     // Update message content with complete markdown parsing
                     if (currentAssistantMessage) {
                         const messageContent = currentAssistantMessage.querySelector('.message-content')
-                        messageContent.innerHTML = marked.parse(completeResponse)
+                        // Remove structure and diagram tags before markdown parsing
+                        let cleanedResponse = completeResponse.replace(/<DIAGRAM>[\s\S]*?<\/DIAGRAM>/g, '').replace(/<STRUCTURE>[\s\S]*?<\/STRUCTURE>/g, '')
+                        messageContent.innerHTML = marked.parse(cleanedResponse)
                         if (typeof Prism !== 'undefined') {
                             Prism.highlightAllUnder(messageContent)
                         }
@@ -930,10 +992,11 @@ function handleUserQuery(userQuery) {
                     // Add to complete response for final markdown parsing
                     completeResponse += processedText
                     
-                    // For streaming display, just append text content
+                    // For streaming display, append text content but remove structure/diagram tags
                     if (currentAssistantMessage) {
                         const messageContent = currentAssistantMessage.querySelector('.message-content')
-                        messageContent.textContent += processedText
+                        let cleanedText = processedText.replace(/<DIAGRAM>[\s\S]*?<\/DIAGRAM>/g, '').replace(/<STRUCTURE>[\s\S]*?<\/STRUCTURE>/g, '')
+                        messageContent.textContent += cleanedText
                         
                         // Scroll to bottom
                         const chatHistory = document.getElementById('chatHistory')

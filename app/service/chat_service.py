@@ -199,6 +199,7 @@ class ChatService:
                     # 다이어그램이 성공적으로 생성된 경우
                     diagram_path = result['diagram_path']
                     description = result['description']
+                    structure = result['structure']
                     
                     logger.info(f"Diagram generated successfully: {diagram_path}")
                     logger.debug(f"Description length: {len(description) if description else 0} characters")
@@ -211,6 +212,9 @@ class ChatService:
                     
                     # 다이어그램 경로와 설명을 클라이언트에게 전송
                     yield f"<DIAGRAM>{diagram_path}</DIAGRAM>"
+
+                     # 다이어그램 스트럭쳐를 클라이언트에게 전송
+                    yield f"<STRUCTURE>{structure}</STRUCTURE>"
                     
                     # 설명을 스트리밍으로 전송
                     if description:
