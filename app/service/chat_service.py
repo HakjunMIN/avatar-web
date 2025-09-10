@@ -1,5 +1,6 @@
 import datetime
 import json
+import logging
 import os
 import pytz
 import random
@@ -20,6 +21,9 @@ sentence_level_punctuations = ['.', '?', '!', ':', ';', '。', '？', '！', '�
 enable_quick_reply = False
 quick_replies = ['Let me take a look.', 'Let me check.', 'One moment, please.']
 oyd_doc_regex = re.compile(r'\[doc(\d+)\]')
+
+# Logger 설정
+logger = logging.getLogger(__name__)
 
 azure_openai = None
 if azure_openai_endpoint and azure_openai_api_key:
@@ -62,10 +66,27 @@ class ChatService:
     
     def handle_function_call(self, function_name: str, arguments: dict):
         """Function Call 처리"""
+        logger.info(f"Starting function call: {function_name}")
+        logger.debug(f"Arguments received: {arguments}")
+        
         if function_name == "generate_architecture_diagram":
             requirements = arguments.get("requirements", "")
-            return self.architecture_service.generate_architecture_diagram(requirements)
+            logger.info("Processing architecture diagram request")
+            logger.debug(f"Requirements: {requirements}")
+            
+            try:
+                result = self.architecture_service.generate_architecture_diagram(requirements)
+                logger.info(f"Architecture service completed with success: {result.get('success', False)}")
+                if result.get('success'):
+                    logger.info(f"Generated diagram path: {result.get('diagram_path', 'N/A')}")
+                else:
+                    logger.error(f"Architecture service error: {result.get('error', 'Unknown error')}")
+                return result
+            except Exception as e:
+                logger.exception(f"Exception occurred during architecture diagram generation: {str(e)}")
+                return {"success": False, "error": f"Exception in architecture service: {str(e)}"}
         else:
+            logger.warning(f"Unknown function: {function_name}")
             return {"success": False, "error": f"Unknown function: {function_name}"}
     
     def initialize_chat_context(self, system_prompt: str, client_id: uuid.UUID) -> None:
@@ -145,13 +166,21 @@ class ChatService:
         
         # Function Call이 요청된 경우
         if response_message.tool_calls:
+            logger.info(f"{len(response_message.tool_calls)} tool call(s) detected for client {client_id}")
+            
             for tool_call in response_message.tool_calls:
                 function_name = tool_call.function.name
                 function_args = json.loads(tool_call.function.arguments)
                 
+                logger.info(f"Executing function: {function_name}")
+                logger.debug(f"Function arguments: {function_args}")
+                
                 # 진행 상황 알림 메시지들
                 if function_name == "generate_architecture_diagram":
                     requirements = function_args.get("requirements", "")
+                    
+                    logger.info("Architecture diagram generation started")
+                    logger.debug(f"Requirements: {requirements}")
                     
                     # 단계별 진행 상황 메시지
                     yield "🔍 아키텍처 요구사항을 분석하고 있습니다...\n\n"
@@ -162,12 +191,17 @@ class ChatService:
                         speak_callback("아키텍처 다이어그램을 생성하고 있습니다.", 0, client_id)
                 
                 # 아키텍처 다이어그램 생성 함수 호출
+                logger.debug(f"Calling function handler for {function_name}")
                 result = self.handle_function_call(function_name, function_args)
+                logger.debug(f"Function result: {result}")
                 
                 if result['success']:
                     # 다이어그램이 성공적으로 생성된 경우
                     diagram_path = result['diagram_path']
                     description = result['description']
+                    
+                    logger.info(f"Diagram generated successfully: {diagram_path}")
+                    logger.debug(f"Description length: {len(description) if description else 0} characters")
                     
                     # 완료 메시지
                     yield "✅ 다이어그램 생성이 완료되었습니다!\n\n"
@@ -197,8 +231,11 @@ class ChatService:
                 else:
                     # 오류 발생 시
                     error_message = f"다이어그램 생성 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}"
+                    logger.error(f"Function call error: {result.get('error', 'Unknown error')}")
                     yield error_message
                     assistant_reply = error_message
+            
+            logger.info(f"All function calls completed for client {client_id}")
         else:
             # 일반적인 스트리밍 응답 처리
             stream_response = azure_openai.chat.completions.create(
@@ -217,7 +254,7 @@ class ChatService:
                         if is_first_chunk:
                             first_token_latency_ms = round(
                                 (datetime.datetime.now(pytz.UTC) - aoai_start_time).total_seconds() * 1000)
-                            print(f"AOAI first token latency: {first_token_latency_ms}ms")
+                            logger.info(f"AOAI first token latency: {first_token_latency_ms}ms")
                             yield f"<FTL>{first_token_latency_ms}</FTL>"
                             is_first_chunk = False
                         if oyd_doc_regex.search(response_token):
@@ -228,7 +265,7 @@ class ChatService:
                             if is_first_sentence:
                                 first_sentence_latency_ms = round(
                                     (datetime.datetime.now(pytz.UTC) - aoai_start_time).total_seconds() * 1000)
-                                print(f"AOAI first sentence latency: {first_sentence_latency_ms}ms")
+                                logger.info(f"AOAI first sentence latency: {first_sentence_latency_ms}ms")
                                 yield f"<FSL>{first_sentence_latency_ms}</FSL>"
                                 is_first_sentence = False
                             if speak_callback:
@@ -243,7 +280,7 @@ class ChatService:
                                         if is_first_sentence:
                                             first_sentence_latency_ms = round(
                                                 (datetime.datetime.now(pytz.UTC) - aoai_start_time).total_seconds() * 1000)
-                                            print(f"AOAI first sentence latency: {first_sentence_latency_ms}ms")
+                                            logger.info(f"AOAI first sentence latency: {first_sentence_latency_ms}ms")
                                             yield f"<FSL>{first_sentence_latency_ms}</FSL>"
                                             is_first_sentence = False
                                         if speak_callback:

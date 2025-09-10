@@ -32,6 +32,136 @@ var diagramRegex = new RegExp(/<DIAGRAM>(.*?)<\/DIAGRAM>/)
 var lastTypeSubmitTime = 0
 // Global buffer for streaming chunks
 var streamBuffer = ''
+// Current assistant message element for streaming updates
+var currentAssistantMessage = null
+// WebSocket response completion timer
+var wsResponseTimer = null
+// Complete response text for markdown parsing
+var completeWsResponse = ''
+
+// Chat utility functions
+function createChatMessage(sender, content = '', isMarkdown = false) {
+    const messageDiv = document.createElement('div')
+    messageDiv.className = `chat-message ${sender}`
+    
+    const messageHeader = document.createElement('div')
+    messageHeader.className = 'message-header'
+    
+    const avatar = document.createElement('div')
+    avatar.className = `avatar ${sender}`
+    avatar.textContent = sender === 'user' ? 'U' : 'A'
+    
+    const senderLabel = document.createElement('span')
+    senderLabel.textContent = sender === 'user' ? 'You' : 'Assistant'
+    
+    const timestamp = document.createElement('span')
+    timestamp.className = 'message-timestamp'
+    timestamp.textContent = new Date().toLocaleTimeString()
+    
+    messageHeader.appendChild(avatar)
+    messageHeader.appendChild(senderLabel)
+    messageHeader.appendChild(timestamp)
+    
+    const messageContent = document.createElement('div')
+    messageContent.className = 'message-content'
+    
+    if (content) {
+        if (isMarkdown && sender === 'assistant') {
+            messageContent.innerHTML = marked.parse(content)
+            // Apply syntax highlighting if Prism is available
+            if (typeof Prism !== 'undefined') {
+                Prism.highlightAllUnder(messageContent)
+            }
+        } else {
+            messageContent.textContent = content
+        }
+    }
+    
+    messageDiv.appendChild(messageHeader)
+    messageDiv.appendChild(messageContent)
+    
+    return messageDiv
+}
+
+function addUserMessage(content) {
+    const chatHistory = document.getElementById('chatHistory')
+    const userMessage = createChatMessage('user', content, false)
+    chatHistory.appendChild(userMessage)
+    chatHistory.scrollTop = chatHistory.scrollHeight
+}
+
+function addAssistantMessage(content = '', isComplete = false) {
+    const chatHistory = document.getElementById('chatHistory')
+    
+    if (!currentAssistantMessage) {
+        currentAssistantMessage = createChatMessage('assistant', '', false)
+        chatHistory.appendChild(currentAssistantMessage)
+    }
+    
+    const messageContent = currentAssistantMessage.querySelector('.message-content')
+    
+    if (content) {
+        if (isComplete) {
+            // Parse as markdown when message is complete
+            messageContent.innerHTML = marked.parse(content)
+            if (typeof Prism !== 'undefined') {
+                Prism.highlightAllUnder(messageContent)
+            }
+        } else {
+            // For streaming, just append text
+            messageContent.textContent += content
+        }
+    }
+    
+    chatHistory.scrollTop = chatHistory.scrollHeight
+    
+    if (isComplete) {
+        currentAssistantMessage = null
+    }
+}
+
+function showTypingIndicator() {
+    const chatHistory = document.getElementById('chatHistory')
+    
+    // Remove existing typing indicator
+    const existingIndicator = chatHistory.querySelector('.typing-indicator')
+    if (existingIndicator) {
+        existingIndicator.remove()
+    }
+    
+    const typingDiv = document.createElement('div')
+    typingDiv.className = 'typing-indicator'
+    typingDiv.innerHTML = `
+        <span>Assistant is typing</span>
+        <div class="typing-dots">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    `
+    
+    chatHistory.appendChild(typingDiv)
+    chatHistory.scrollTop = chatHistory.scrollHeight
+}
+
+function hideTypingIndicator() {
+    const chatHistory = document.getElementById('chatHistory')
+    const typingIndicator = chatHistory.querySelector('.typing-indicator')
+    if (typingIndicator) {
+        typingIndicator.remove()
+    }
+}
+
+// Configure marked for better rendering
+if (typeof marked !== 'undefined') {
+    marked.setOptions({
+        breaks: true,
+        gfm: true,
+        sanitize: false,
+        smartLists: true,
+        smartypants: true
+    })
+}
 
 // Function to process buffered content and extract complete tags
 function processStreamBuffer(newChunk) {
@@ -96,55 +226,84 @@ function displayArchitectureDiagram(diagramPath) {
         return
     }
     
-    // Ensure chat history is visible and properly styled for diagrams
+    // Ensure chat history is visible
     if (chatHistoryDiv) {
         chatHistoryDiv.hidden = false
-        chatHistoryDiv.style.display = 'block'
+        chatHistoryDiv.style.display = 'flex'
         console.log('[displayArchitectureDiagram] chatHistory div made visible')
     }
+    
+    // Create a special message container for the diagram
+    const diagramMessage = document.createElement('div')
+    diagramMessage.className = 'chat-message assistant diagram-message'
+    
+    const messageHeader = document.createElement('div')
+    messageHeader.className = 'message-header'
+    
+    const avatar = document.createElement('div')
+    avatar.className = 'avatar assistant'
+    avatar.textContent = 'A'
+    
+    const senderLabel = document.createElement('span')
+    senderLabel.textContent = 'Assistant'
+    
+    const timestamp = document.createElement('span')
+    timestamp.className = 'message-timestamp'
+    timestamp.textContent = new Date().toLocaleTimeString()
+    
+    messageHeader.appendChild(avatar)
+    messageHeader.appendChild(senderLabel)
+    messageHeader.appendChild(timestamp)
+    
+    // Create message content with diagram
+    const messageContent = document.createElement('div')
+    messageContent.className = 'message-content'
+    messageContent.style.maxWidth = '90%'
+    messageContent.style.padding = '1rem'
     
     // Create diagram container
     let diagramContainer = document.createElement('div')
     diagramContainer.className = 'diagram-container'
-    diagramContainer.style.margin = '10px 0'
-    diagramContainer.style.padding = '10px'
-    diagramContainer.style.border = '1px solid #ddd'
-    diagramContainer.style.borderRadius = '8px'
-    diagramContainer.style.backgroundColor = '#f9f9f9'
+    diagramContainer.style.margin = '0'
+    diagramContainer.style.textAlign = 'center'
     
     // Create diagram title
     let diagramTitle = document.createElement('h3')
     diagramTitle.innerHTML = '🔧 Azure Architecture Diagram'
-    diagramTitle.style.margin = '0 0 10px 0'
-    diagramTitle.style.color = '#333'
+    diagramTitle.style.margin = '0 0 1rem 0'
+    diagramTitle.style.color = 'var(--primary-color)'
+    diagramTitle.style.fontSize = '1.1rem'
+    diagramTitle.style.fontWeight = '600'
     
     // Create image element
     let diagramImg = document.createElement('img')
     diagramImg.src = `/api/diagram/${encodeURIComponent(diagramPath)}`
     diagramImg.alt = 'Azure Architecture Diagram'
     diagramImg.style.maxWidth = '100%'
-    diagramImg.style.maxHeight = '250px'
+    diagramImg.style.maxHeight = '300px'
     diagramImg.style.height = 'auto'
     diagramImg.style.display = 'block'
     diagramImg.style.margin = '0 auto'
-    diagramImg.style.border = '1px solid #ccc'
-    diagramImg.style.borderRadius = '4px'
+    diagramImg.style.border = '1px solid var(--border-color)'
+    diagramImg.style.borderRadius = 'var(--border-radius-sm)'
     diagramImg.style.objectFit = 'contain'
+    diagramImg.style.backgroundColor = '#ffffff'
     
     // Add loading message
     let loadingMsg = document.createElement('p')
     loadingMsg.textContent = '다이어그램 로딩 중...'
     loadingMsg.className = 'diagram-loading'
     loadingMsg.style.textAlign = 'center'
-    loadingMsg.style.color = '#666'
+    loadingMsg.style.color = 'var(--text-secondary)'
+    loadingMsg.style.margin = '1rem 0'
     diagramContainer.appendChild(loadingMsg)
     
     // Add error handling for image loading
     diagramImg.onerror = function() {
         this.style.display = 'none'
-        loadingMsg.textContent = '다이어그램을 로드할 수 없습니다.'
+        loadingMsg.textContent = '❌ 다이어그램을 로드할 수 없습니다.'
         loadingMsg.className = 'diagram-error'
-        loadingMsg.style.color = '#e74c3c'
+        loadingMsg.style.color = 'var(--danger-color)'
     }
     
     // Add success handling for image loading
@@ -161,29 +320,41 @@ function displayArchitectureDiagram(diagramPath) {
     downloadLink.textContent = '📥 다이어그램 다운로드'
     downloadLink.className = 'diagram-download-link'
     downloadLink.style.display = 'inline-block'
-    downloadLink.style.marginTop = '10px'
-    downloadLink.style.padding = '5px 10px'
-    downloadLink.style.backgroundColor = '#007acc'
+    downloadLink.style.marginTop = '1rem'
+    downloadLink.style.padding = '0.5rem 1rem'
+    downloadLink.style.backgroundColor = 'var(--primary-color)'
     downloadLink.style.color = 'white'
     downloadLink.style.textDecoration = 'none'
-    downloadLink.style.borderRadius = '4px'
-    downloadLink.style.fontSize = '14px'
+    downloadLink.style.borderRadius = 'var(--border-radius-sm)'
+    downloadLink.style.fontSize = '0.875rem'
+    downloadLink.style.transition = 'var(--transition)'
+    
+    downloadLink.onmouseover = function() {
+        this.style.backgroundColor = 'var(--primary-hover)'
+    }
+    
+    downloadLink.onmouseout = function() {
+        this.style.backgroundColor = 'var(--primary-color)'
+    }
     
     // Assemble the diagram container
     diagramContainer.appendChild(diagramTitle)
     diagramContainer.appendChild(diagramImg)
-    diagramContainer.appendChild(document.createElement('br'))
     diagramContainer.appendChild(downloadLink)
-
-    // Insert diagram directly into chatHistory div
-    if (chatHistoryDiv) {
-        chatHistoryDiv.appendChild(diagramContainer)
-        chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight
-        console.log('[displayArchitectureDiagram] Diagram container added to chatHistory')
-        console.log(`[displayArchitectureDiagram] chatHistory now has ${chatHistoryDiv.children.length} child elements`)
-    } else {
-        console.error('[displayArchitectureDiagram] Failed to append diagram - chatHistory div is null')
-    }
+    
+    // Add diagram to message content
+    messageContent.appendChild(diagramContainer)
+    
+    // Assemble the complete message
+    diagramMessage.appendChild(messageHeader)
+    diagramMessage.appendChild(messageContent)
+    
+    // Insert diagram message into chat history
+    chatHistoryDiv.appendChild(diagramMessage)
+    chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight
+    
+    console.log('[displayArchitectureDiagram] Diagram message added to chatHistory')
+    console.log(`[displayArchitectureDiagram] chatHistory now has ${chatHistoryDiv.children.length} child elements`)
 }
 
 // Fetch ICE token from the server
@@ -291,7 +462,6 @@ function setupWebSocket() {
         let path = data.path
         if (path === 'api.chat') {
             lastInteractionTime = new Date()
-            let chatHistoryTextArea = document.getElementById('chatHistory')
             let chunkString = data.chatResponse
             if (sttLatencyRegex.test(chunkString)) {
                 let sttLatency = parseInt(sttLatencyRegex.exec(chunkString)[0].replace('<STTL>', '').replace('</STTL>', ''))
@@ -321,11 +491,47 @@ function setupWebSocket() {
             let processedText = processStreamBuffer(chunkString)
 
             if (processedText.trim()) {
-                let chatHistoryDiv = document.getElementById('chatHistory')
-                // Use textContent to preserve existing DOM elements (like diagrams)
-                let textNode = document.createTextNode(processedText)
-                chatHistoryDiv.appendChild(textNode)
-                chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight
+                // Handle first response chunk
+                if (isFirstResponseChunk) {
+                    hideTypingIndicator()
+                    addAssistantMessage('', false)
+                    isFirstResponseChunk = false
+                    completeWsResponse = ''
+                }
+                
+                // Add to complete response for final markdown parsing
+                completeWsResponse += processedText
+                
+                if (currentAssistantMessage) {
+                    const messageContent = currentAssistantMessage.querySelector('.message-content')
+                    messageContent.textContent += processedText
+                    
+                    // Scroll to bottom
+                    const chatHistory = document.getElementById('chatHistory')
+                    chatHistory.scrollTop = chatHistory.scrollHeight
+                }
+                
+                // Reset completion timer
+                if (wsResponseTimer) {
+                    clearTimeout(wsResponseTimer)
+                }
+                
+                // Set timer to detect completion (no new chunks for 1 second)
+                wsResponseTimer = setTimeout(() => {
+                    if (currentAssistantMessage) {
+                        const messageContent = currentAssistantMessage.querySelector('.message-content')
+                        messageContent.innerHTML = marked.parse(completeWsResponse)
+                        if (typeof Prism !== 'undefined') {
+                            Prism.highlightAllUnder(messageContent)
+                        }
+                        currentAssistantMessage = null
+                        completeWsResponse = ''
+                        
+                        // Scroll to bottom after markdown parsing
+                        const chatHistory = document.getElementById('chatHistory')
+                        chatHistory.scrollTop = chatHistory.scrollHeight
+                    }
+                }, 1000)
             }
         } else if (path === 'api.event') {
             console.log("[" + (new Date()).toISOString() + "] WebSocket event received: " + data.eventType)
@@ -586,6 +792,16 @@ function connectToAvatarService(peerConnection) {
 function handleUserQuery(userQuery) {
     lastInteractionTime = new Date()
     chatRequestSentTime = new Date()
+    
+    // Add user message to chat
+    addUserMessage(userQuery)
+    
+    // Show typing indicator
+    showTypingIndicator()
+    
+    // Clear any existing assistant message
+    currentAssistantMessage = null
+    
     if (socket !== undefined) {
         socket.emit('message', { clientId: clientId, path: 'api.chat', systemPrompt: document.getElementById('prompt').value, userQuery: userQuery })
         isFirstResponseChunk = true
@@ -606,23 +822,34 @@ function handleUserQuery(userQuery) {
             throw new Error(`Chat API response status: ${response.status} ${response.statusText}`)
         }
 
-        let chatHistoryTextArea = document.getElementById('chatHistory')
-        let assistantLabel = document.createTextNode('Assistant: ')
-        chatHistoryTextArea.appendChild(assistantLabel)
+        // Hide typing indicator when response starts
+        hideTypingIndicator()
+        
+        // Create initial assistant message for streaming
+        addAssistantMessage('', false)
 
         const reader = response.body.getReader()
+        let completeResponse = ''
 
         // Function to recursively read chunks from the stream
         function read() {
             return reader.read().then(({ value, done }) => {
                 // Check if there is still data to read
                 if (done) {
-                    // Stream complete - process any remaining buffer
+                    // Stream complete - process any remaining buffer and finalize message
                     let finalText = clearStreamBuffer()
                     if (finalText.trim()) {
-                        let textNode = document.createTextNode(finalText)
-                        chatHistoryTextArea.appendChild(textNode)
-                        chatHistoryTextArea.scrollTop = chatHistoryTextArea.scrollHeight
+                        completeResponse += finalText
+                    }
+                    
+                    // Update message content with complete markdown parsing
+                    if (currentAssistantMessage) {
+                        const messageContent = currentAssistantMessage.querySelector('.message-content')
+                        messageContent.innerHTML = marked.parse(completeResponse)
+                        if (typeof Prism !== 'undefined') {
+                            Prism.highlightAllUnder(messageContent)
+                        }
+                        currentAssistantMessage = null
                     }
                     return
                 }
@@ -660,9 +887,18 @@ function handleUserQuery(userQuery) {
                 let processedText = processStreamBuffer(chunkString)
 
                 if (processedText.trim()) {
-                    let textNode = document.createTextNode(processedText)
-                    chatHistoryTextArea.appendChild(textNode)
-                    chatHistoryTextArea.scrollTop = chatHistoryTextArea.scrollHeight
+                    // Add to complete response for final markdown parsing
+                    completeResponse += processedText
+                    
+                    // For streaming display, just append text content
+                    if (currentAssistantMessage) {
+                        const messageContent = currentAssistantMessage.querySelector('.message-content')
+                        messageContent.textContent += processedText
+                        
+                        // Scroll to bottom
+                        const chatHistory = document.getElementById('chatHistory')
+                        chatHistory.scrollTop = chatHistory.scrollHeight
+                    }
                 }
 
                 // Continue reading the next chunk
@@ -869,6 +1105,8 @@ window.clearChatHistory = () => {
     lastInteractionTime = new Date()
     // Clear stream buffer
     streamBuffer = ''
+    // Reset current assistant message
+    currentAssistantMessage = null
     
     fetch('/api/chat/clearHistory', {
         method: 'POST',
@@ -880,7 +1118,7 @@ window.clearChatHistory = () => {
     })
     .then(response => {
         if (response.ok) {
-            // Clear all child nodes from chatHistory to properly remove diagrams and text
+            // Clear all child nodes from chatHistory to properly remove all messages
             let chatHistoryDiv = document.getElementById('chatHistory')
             while (chatHistoryDiv.firstChild) {
                 chatHistoryDiv.removeChild(chatHistoryDiv.firstChild)
@@ -1078,16 +1316,8 @@ window.microphone = () => {
             }
 
             let chatHistoryTextArea = document.getElementById('chatHistory')
-            // Add spacing and user query using DOM manipulation to preserve diagrams
-            if (chatHistoryTextArea.childNodes.length > 0) {
-                let lineBreak1 = document.createTextNode('\n\n')
-                chatHistoryTextArea.appendChild(lineBreak1)
-            }
-
-            let userText = document.createTextNode(userQuery + '\n\n')
-            chatHistoryTextArea.appendChild(userText)
-            chatHistoryTextArea.scrollTop = chatHistoryTextArea.scrollHeight
-
+            
+            // Don't manually add user text here - handleUserQuery will handle it
             handleUserQuery(userQuery)
 
             isFirstRecognizingEvent = true
@@ -1122,17 +1352,6 @@ window.updateTypeMessageBox = () => {
         const raw = document.getElementById('userMessageBox').value
         const userQuery = raw.trim()
         if (userQuery === '') return
-
-        let chatHistoryTextArea = document.getElementById('chatHistory')
-        // Add spacing and user query using DOM manipulation to preserve diagrams
-        if (chatHistoryTextArea.childNodes.length > 0) {
-            let lineBreak1 = document.createTextNode('\n\n')
-            chatHistoryTextArea.appendChild(lineBreak1)
-        }
-
-        let userText = document.createTextNode(userQuery + '\n\n')
-        chatHistoryTextArea.appendChild(userText)
-        chatHistoryTextArea.scrollTop = chatHistoryTextArea.scrollHeight
 
         if (isSpeaking) {
             window.stopSpeaking()

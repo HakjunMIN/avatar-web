@@ -1,6 +1,10 @@
 import copy
+import logging
 import torch
 import numpy as np
+
+# 로거 설정
+logger = logging.getLogger(__name__)
 
 
 class VADIterator:
@@ -150,9 +154,9 @@ class VADService:
                     min_silence_duration_ms=min_silence_duration_ms, 
                     speech_pad_ms=speech_pad_ms
                 )
-                print("VAD service initialized successfully")
+                logger.info("VAD service initialized successfully")
             except Exception as e:
-                print(f"Failed to initialize VAD service: {e}")
+                logger.error(f"Failed to initialize VAD service: {e}")
                 self.enable_vad = False
     
     def get_vad_iterator(self):

@@ -1,7 +1,11 @@
 import base64
 import uuid
+import logging
 from flask import request
 from flask_socketio import join_room
+
+# 로거 설정
+logger = logging.getLogger(__name__)
 
 
 class WebSocketHandler:
@@ -16,7 +20,7 @@ class WebSocketHandler:
         """WebSocket 연결 처리"""
         client_id = uuid.UUID(request.args.get('clientId'))
         join_room(client_id)
-        print(f"WebSocket connected for client {client_id}.")
+        logger.info(f"WebSocket connected for client {client_id}.")
     
     def handle_message(self, message, socketio):
         """WebSocket 메시지 처리"""

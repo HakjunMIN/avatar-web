@@ -1,5 +1,9 @@
 import uuid
+import logging
 from typing import Dict, Any
+
+# 로거 설정
+logger = logging.getLogger(__name__)
 
 
 class ClientManager:
@@ -45,7 +49,7 @@ class ClientManager:
         """클라이언트 컨텍스트 해제"""
         if client_id in self.client_contexts:
             self.client_contexts.pop(client_id)
-            print(f"Client context released for client {client_id}.")
+            logger.info(f"Client context released for client {client_id}.")
     
     def get_client_status(self, client_id: uuid.UUID) -> Dict[str, Any]:
         """클라이언트 상태 반환"""

@@ -1,10 +1,14 @@
 import azure.cognitiveservices.speech as speechsdk
 import datetime
+import logging
 import numpy as np
 import pytz
 import torch
 import uuid
 from typing import Callable
+
+# 로거 설정
+logger = logging.getLogger(__name__)
 
 
 class STTService:
@@ -45,10 +49,10 @@ class STTService:
             
             # 이벤트 핸들러 설정
             speech_recognizer.session_started.connect(
-                lambda evt: print(f'STT session started - session id: {evt.session_id}')
+                lambda evt: logger.info(f'STT session started - session id: {evt.session_id}')
             )
             speech_recognizer.session_stopped.connect(
-                lambda evt: print('STT session stopped.')
+                lambda evt: logger.info('STT session stopped.')
             )
             
             speech_recognition_start_time = datetime.datetime.now(pytz.UTC)
@@ -75,7 +79,7 @@ class STTService:
                             (recognition_result_received_time - speech_recognition_start_time).total_seconds() * 1000 
                             - speech_finished_offset
                         )
-                        print(f'STT latency: {stt_latency}ms')
+                        logger.debug(f'STT latency: {stt_latency}ms')
                         
                         if socketio:
                             socketio.emit("response", {
@@ -105,7 +109,7 @@ class STTService:
                                 }, room=client_id)
                     
                     except Exception as e:
-                        print(f"Error in handling user query: {e}")
+                        logger.error(f"Error in handling user query: {e}")
             
             speech_recognizer.recognized.connect(stt_recognized_cb)
             
@@ -119,7 +123,7 @@ class STTService:
             def stt_canceled_cb(evt):
                 """STT 취소 콜백"""
                 cancellation_details = speechsdk.CancellationDetails(evt.result)
-                print(f'STT connection canceled. Error message: {cancellation_details.error_details}')
+                logger.warning(f'STT connection canceled. Error message: {cancellation_details.error_details}')
             
             speech_recognizer.canceled.connect(stt_canceled_cb)
             
@@ -170,7 +174,7 @@ class STTService:
                 # VAD 검사
                 vad_detected = vad_iterator(torch.from_numpy(audio_chunk_float))
                 if vad_detected:
-                    print("Voice activity detected.")
+                    logger.debug("Voice activity detected.")
                     if stop_speaking_func:
                         stop_speaking_func(client_id, False)
     

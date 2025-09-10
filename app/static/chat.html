@@ -8,6 +8,10 @@
     <link rel="icon" href="{{ url_for('static', filename='image/favicon.ico') }}">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked@5.1.1/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css">
     <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
     <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/3.1.3/socket.io.js"></script>
@@ -34,7 +38,7 @@
             <label for="azureOpenAIDeploymentName">Azure OpenAI Deployment Name:</label>
             <input id="azureOpenAIDeploymentName" value="gpt-4.1-mini" type="text" />
             <label for="prompt">System Prompt:</label>
-            <textarea id="prompt">You are an AI assistant that helps people find information. You MUST speak in Korean. When responding, make sure to output \n appropriately. Since this will be used for TTS speech, avoid using Markdown and respond in a friendly, conversational tone.</textarea>
+            <textarea id="prompt">You are an AI assistant that helps people find information. You MUST speak in Korean. When responding, make sure to output \n appropriately. Since this will be used for TTS speech, respond in a friendly, conversational tone.</textarea>
             <div>
                 <input type="checkbox" id="enableOyd" onchange="window.updataEnableOyd()">
                 <label for="enableOyd">Enable On Your Data</label>
@@ -140,7 +144,9 @@
                             </div>
                         </div>
                         <div class="chat-history-container">
-                            <div id="chatHistory" class="chat-history" contenteditable="false" hidden></div>
+                            <div id="chatHistory" class="chat-history" contenteditable="false" hidden>
+                                <!-- Chat messages will be dynamically added here -->
+                            </div>
                         </div>
                         <div class="message-input-container">
                             <textarea id="userMessageBox" class="message-input" placeholder="Type your message here..." hidden></textarea>

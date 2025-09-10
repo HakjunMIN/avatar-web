@@ -2,11 +2,15 @@ import azure.cognitiveservices.speech as speechsdk
 import datetime
 import html
 import json
+import logging
 import pytz
 import requests
 import threading
 import time
 import uuid
+
+# 로거 설정
+logger = logging.getLogger(__name__)
 class AvatarService:
     def __init__(self, speech_region: str, speech_key: str, ice_server_url: str = None, 
                  ice_server_url_remote: str = None, ice_server_username: str = None, 
@@ -43,7 +47,7 @@ class AvatarService:
                     headers={'Ocp-Apim-Subscription-Key': self.speech_key}
                 ).text
             except Exception as e:
-                print(f"Failed to refresh speech token: {e}")
+                logger.error(f"Failed to refresh speech token: {e}")
             time.sleep(60 * 9)  # 9분마다 갱신
     
     def _refresh_ice_token(self):
@@ -67,7 +71,7 @@ class AvatarService:
                 else:
                     raise Exception(f"Failed to get ICE token. Status code: {ice_token_response.status_code}")
             except Exception as e:
-                print(f"Failed to refresh ICE token: {e}")
+                logger.error(f"Failed to refresh ICE token: {e}")
             time.sleep(60 * 60 * 24)  # 24시간마다 갱신
     
     def get_speech_token(self) -> str:
@@ -125,10 +129,10 @@ class AvatarService:
             )
             
             connection = speechsdk.Connection.from_speech_synthesizer(speech_synthesizer)
-            connection.connected.connect(lambda evt: print('TTS Avatar service connected.'))
+            connection.connected.connect(lambda evt: logger.info('TTS Avatar service connected.'))
             
             def tts_disconnected_cb(evt):
-                print('TTS Avatar service disconnected.')
+                logger.info('TTS Avatar service disconnected.')
                 client_context['speech_synthesizer_connection'] = None
                 client_context['speech_synthesizer_connected'] = False
             
@@ -142,13 +146,13 @@ class AvatarService:
             client_context['personal_voice_speaker_profile_id'] = personal_voice_speaker_profile_id
             
             speech_synthesis_result = speech_synthesizer.speak_text_async('').get()
-            print(f'Result id for avatar connection: {speech_synthesis_result.result_id}')
+            logger.debug(f'Result id for avatar connection: {speech_synthesis_result.result_id}')
             
             if speech_synthesis_result.reason == speechsdk.ResultReason.Canceled:
                 cancellation_details = speech_synthesis_result.cancellation_details
-                print(f"Speech synthesis canceled: {cancellation_details.reason}")
+                logger.warning(f"Speech synthesis canceled: {cancellation_details.reason}")
                 if cancellation_details.reason == speechsdk.CancellationReason.Error:
-                    print(f"Error details: {cancellation_details.error_details}")
+                    logger.error(f"Error details: {cancellation_details.error_details}")
                     raise Exception(cancellation_details.error_details)
             
             turn_start_message = speech_synthesizer.properties.get_property_by_name('SpeechSDKInternal-ExtraTurnStartMessage')
@@ -231,13 +235,13 @@ class AvatarService:
                         self.speak_text(text_to_speak, tts_voice, personal_voice_speaker_profile_id, 
                                       ending_silence_ms, client_context)
                     except Exception as e:
-                        print(f"Error in speaking text: {e}")
+                        logger.error(f"Error in speaking text: {e}")
                         break
                     client_context['last_speak_time'] = datetime.datetime.now(pytz.UTC)
                 
                 client_context['is_speaking'] = False
                 client_context['speaking_text'] = None
-                print("Speaking thread stopped.")
+                logger.debug("Speaking thread stopped.")
             
             client_context['speaking_thread'] = threading.Thread(target=speak_thread)
             client_context['speaking_thread'].start()
@@ -281,9 +285,9 @@ class AvatarService:
         
         if speech_synthesis_result.reason == speechsdk.ResultReason.Canceled:
             cancellation_details = speech_synthesis_result.cancellation_details
-            print(f"Speech synthesis canceled: {cancellation_details.reason}")
+            logger.warning(f"Speech synthesis canceled: {cancellation_details.reason}")
             if cancellation_details.reason == speechsdk.CancellationReason.Error:
-                print(f"Result ID: {speech_synthesis_result.result_id}. Error details: {cancellation_details.error_details}")
+                logger.error(f"Result ID: {speech_synthesis_result.result_id}. Error details: {cancellation_details.error_details}")
                 raise Exception(cancellation_details.error_details)
         
         return speech_synthesis_result.result_id

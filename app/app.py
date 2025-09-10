@@ -4,6 +4,7 @@ import traceback
 import uuid
 import os
 import urllib.parse
+import logging
 from flask import Flask, Response, render_template, request, send_file
 from flask_socketio import SocketIO
 
@@ -14,6 +15,17 @@ from service.stt_service import STTService
 from service.chat_service import chat_service
 from util.vad_iterator import VADService
 from service.websocket_handler import WebSocketHandler
+
+# 로거 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('app.log', encoding='utf-8')
+    ]
+)
+logger = logging.getLogger(__name__)
 
 config = ConfigService()
 
@@ -251,7 +263,7 @@ def releaseClient() -> Response:
         client_manager.release_client(client_id)
         return Response('Client context released.', status=200)
     except Exception as e:
-        print(f"Client context release failed. Error message: {e}")
+        logger.error(f"Client context release failed. Error message: {e}")
         return Response(f"Client context release failed. Error message: {e}", status=400)
 
 @app.route("/api/diagram/<path:diagram_path>", methods=["GET"])
@@ -268,7 +280,7 @@ def serveDiagram(diagram_path):
         # 파일 전송
         return send_file(decoded_path, mimetype='image/png')
     except Exception as e:
-        print(f"Error serving diagram: {e}")
+        logger.error(f"Error serving diagram: {e}")
         return Response(f"Error serving diagram: {e}", status=500)
 
 

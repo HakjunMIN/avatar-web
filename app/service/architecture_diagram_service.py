@@ -1,6 +1,7 @@
 import os
 import uuid
 import json
+import logging
 from typing import Dict, Any
 from openai import AzureOpenAI
 
@@ -23,6 +24,9 @@ except ImportError:
 azure_openai_endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT')
 azure_openai_api_key = os.environ.get('AZURE_OPENAI_API_KEY')
 azure_openai_deployment_name = os.environ.get('AZURE_OPENAI_DEPLOYMENT_NAME')
+
+# Logger 설정
+logger = logging.getLogger(__name__)
 
 class ArchitectureDiagramService:
     
@@ -73,20 +77,29 @@ class ArchitectureDiagramService:
         Returns:
             Dict containing diagram path and description
         """
+        logger.info("Starting diagram generation")
+        logger.debug(f"Requirements: {requirements}")
+        
         try:
             # OpenAI를 사용하여 요구사항을 분석하고 다이어그램 구조 생성
+            logger.info("Analyzing requirements with OpenAI")
             diagram_structure = self._analyze_requirements_with_openai(requirements)
+            logger.debug(f"OpenAI analysis completed: {diagram_structure}")
             
             # 다이어그램 생성
+            logger.info("Creating diagram")
             diagram_path = self._create_diagram(diagram_structure)
+            logger.info(f"Diagram created at: {diagram_path}")
             
             # 상세 설명 생성
+            logger.info("Generating description")
             description = self._generate_description(diagram_structure, requirements)
+            logger.debug(f"Description generated, length: {len(description) if description else 0}")
             
             # 다이어그램과 설명을 포함한 포맷된 응답 생성
             formatted_description = self._format_description_with_diagram(description, diagram_path)
             
-            return {
+            result = {
                 'success': True,
                 'diagram_path': diagram_path,
                 'description': formatted_description,
@@ -94,7 +107,12 @@ class ArchitectureDiagramService:
                 'diagram_tag': f'<DIAGRAM>{diagram_path}</DIAGRAM>'
             }
             
+            logger.info("Diagram generation completed successfully")
+            return result
+            
         except Exception as e:
+            logger.exception(f"Error during diagram generation: {str(e)}")
+            
             return {
                 'success': False,
                 'error': str(e),
@@ -163,11 +181,14 @@ class ArchitectureDiagramService:
         
         user_prompt = f"다음 아키텍처 요구사항을 분석하여 Azure 다이어그램 구조를 JSON으로 생성해주세요:\n\n{requirements}"
         
+        logger.debug("Checking OpenAI configuration")
         if not self.azure_openai:
             # OpenAI가 설정되지 않은 경우 기본 구조 반환
+            logger.warning("OpenAI not configured, using default structure")
             return self._get_default_structure()
         
         try:
+            logger.debug("Calling OpenAI API for requirements analysis")
             response = self.azure_openai.chat.completions.create(
                 model=azure_openai_deployment_name,
                 messages=[
@@ -177,16 +198,24 @@ class ArchitectureDiagramService:
                 temperature=0.3
             )
             
+            logger.debug("OpenAI API call completed")
             content = response.choices[0].message.content
+            logger.debug(f"OpenAI response content: {content}")
+            
             # JSON 추출
             start_idx = content.find('{')
             end_idx = content.rfind('}') + 1
             json_str = content[start_idx:end_idx]
             
-            return json.loads(json_str)
+            logger.debug(f"Extracted JSON: {json_str}")
+            
+            result = json.loads(json_str)
+            logger.debug(f"Parsed JSON structure: {result}")
+            return result
             
         except Exception as e:
-            print(f"OpenAI 분석 오류: {e}")
+            logger.exception(f"OpenAI 분석 오류: {e}")
+            logger.info("Falling back to default structure")
             return self._get_default_structure()
     
     def _get_default_structure(self) -> Dict[str, Any]:
@@ -217,7 +246,11 @@ class ArchitectureDiagramService:
     def _create_diagram(self, structure: Dict[str, Any]) -> str:
         """다이어그램 구조를 바탕으로 실제 다이어그램을 생성합니다."""
         
+        logger.info("Starting diagram creation")
+        logger.debug(f"Structure: {structure}")
+        
         if not DIAGRAMS_AVAILABLE:
+            logger.error("Error: diagrams library not available")
             raise ImportError("diagrams 라이브러리가 설치되지 않았습니다. 'pip install diagrams' 명령어로 설치해주세요.")
         
         # .temp 디렉토리에 다이어그램 생성
@@ -226,54 +259,87 @@ class ArchitectureDiagramService:
         os.makedirs(output_dir, exist_ok=True)
         diagram_name = f"azure_architecture_{diagram_id}"
         
-        with Diagram(
-            structure.get('title', 'Azure Architecture'),
-            filename=os.path.join(output_dir, diagram_name),
-            show=False,
-            direction="TB"
-        ):
-            # 컴포넌트 생성
-            components = {}
-            clusters = {}
-            
-            # 클러스터 생성
-            for cluster_info in structure.get('clusters', []):
-                cluster_name = cluster_info['name']
-                cluster_label = cluster_info['label']
-                clusters[cluster_name] = Cluster(cluster_label)
-            
-            # 컴포넌트 생성
-            for component in structure.get('components', []):
-                comp_id = component['id']
-                service = component['service']
-                label = component['label']
-                cluster_name = component.get('cluster')
+        logger.debug(f"Generated diagram ID: {diagram_id}")
+        logger.debug(f"Output directory: {output_dir}")
+        logger.debug(f"Diagram name: {diagram_name}")
+        
+        try:
+            with Diagram(
+                structure.get('title', 'Azure Architecture'),
+                filename=os.path.join(output_dir, diagram_name),
+                show=False,
+                direction="TB"
+            ):
+                # 컴포넌트 생성
+                components = {}
+                clusters = {}
                 
-                if service in self.azure_services_map:
-                    service_class = self.azure_services_map[service]
+                logger.debug(f"Creating clusters: {structure.get('clusters', [])}")
+                # 클러스터 생성
+                for cluster_info in structure.get('clusters', []):
+                    cluster_name = cluster_info['name']
+                    cluster_label = cluster_info['label']
+                    clusters[cluster_name] = Cluster(cluster_label)
+                    logger.debug(f"Created cluster: {cluster_name} ({cluster_label})")
+                
+                logger.debug(f"Creating components: {structure.get('components', [])}")
+                # 컴포넌트 생성
+                for component in structure.get('components', []):
+                    comp_id = component['id']
+                    service = component['service']
+                    label = component['label']
+                    cluster_name = component.get('cluster')
                     
-                    if cluster_name and cluster_name in clusters:
-                        with clusters[cluster_name]:
+                    logger.debug(f"Processing component: {comp_id} ({service})")
+                    
+                    if service in self.azure_services_map:
+                        service_class = self.azure_services_map[service]
+                        
+                        if cluster_name and cluster_name in clusters:
+                            logger.debug(f"Adding component {comp_id} to cluster {cluster_name}")
+                            with clusters[cluster_name]:
+                                components[comp_id] = service_class(label)
+                        else:
+                            logger.debug(f"Adding component {comp_id} without cluster")
                             components[comp_id] = service_class(label)
                     else:
-                        components[comp_id] = service_class(label)
-            
-            # 연결 생성
-            for connection in structure.get('connections', []):
-                from_comp = connection['from']
-                to_comp = connection['to']
-                label = connection.get('label', '')
+                        logger.warning(f"Unknown service type: {service}")
                 
-                if from_comp in components and to_comp in components:
-                    if label:
-                        components[from_comp] >> Edge(label=label) >> components[to_comp]
+                logger.debug(f"Creating connections: {structure.get('connections', [])}")
+                # 연결 생성
+                for connection in structure.get('connections', []):
+                    from_comp = connection['from']
+                    to_comp = connection['to']
+                    label = connection.get('label', '')
+                    
+                    logger.debug(f"Processing connection: {from_comp} -> {to_comp}")
+                    
+                    if from_comp in components and to_comp in components:
+                        if label:
+                            components[from_comp] >> Edge(label=label) >> components[to_comp]
+                            logger.debug(f"Created labeled connection: {from_comp} -> {to_comp} ({label})")
+                        else:
+                            components[from_comp] >> components[to_comp]
+                            logger.debug(f"Created connection: {from_comp} -> {to_comp}")
                     else:
-                        components[from_comp] >> components[to_comp]
-        
-        # 생성된 PNG 파일 경로 - 상대 경로로 반환
-        png_path = f".temp/{diagram_name}.png"
-        
-        return png_path
+                        logger.warning(f"Invalid connection - missing components: {from_comp} -> {to_comp}")
+            
+            # 생성된 PNG 파일 경로 - 상대 경로로 반환
+            png_path = f".temp/{diagram_name}.png"
+            logger.info(f"Diagram creation completed: {png_path}")
+            
+            # 파일이 실제로 생성되었는지 확인
+            full_path = os.path.join(output_dir, f"{diagram_name}.png")
+            if os.path.exists(full_path):
+                logger.debug(f"Diagram file verified: {full_path}")
+            else:
+                logger.warning(f"Diagram file not found: {full_path}")
+            
+            return png_path
+            
+        except Exception as e:
+            logger.exception(f"Error during diagram creation: {str(e)}")
+            raise
     
     def _generate_description(self, structure: Dict[str, Any], requirements: str) -> str:
         """다이어그램에 대한 상세 설명을 생성합니다."""
