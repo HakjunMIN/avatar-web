@@ -59,7 +59,18 @@ class WebSocketHandler:
             self.chat_service.initialize_chat_context(message.get('systemPrompt'), client_id)
             client_context['chat_initiated'] = True
         
-        user_query = message.get('userQuery')
+        # JSON 구조로 받은 메시지 데이터 처리
+        message_data = message.get('messageData', {})
+        user_query = message_data.get('query', message.get('userQuery', ''))  # fallback for compatibility
+        current_structure = message_data.get('structureJson', '')
+        
+        # 클라이언트 컨텍스트에 현재 구조 저장
+        if current_structure:
+            client_context['current_structure'] = current_structure
+            logger.info(f"Received structure from WebSocket client {client_id}: {len(current_structure)} characters")
+        
+        logger.info(f"Processing WebSocket JSON message for {client_id}: query={user_query[:50]}...")
+        
         first_response_chunk = True
         
         for chat_response in self.chat_service.handle_user_query(

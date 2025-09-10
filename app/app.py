@@ -212,23 +212,25 @@ def chat() -> Response:
         chat_service.initialize_chat_context(request.headers.get('SystemPrompt'), client_id)
         client_context['chat_initiated'] = True
     
-    # JSON 형태의 요청을 처리할 수 있도록 수정
-    content_type = request.headers.get('Content-Type', '')
-    if 'application/json' in content_type:
-        try:
-            data = request.get_json()
-            user_query = data.get('query', '')
-            current_structure = data.get('structureJson', '')
+    # 항상 JSON 형태로 요청 처리
+    try:
+        data = request.get_json()
+        if not data:
+            return Response('JSON request body required', status=400)
             
-            # 클라이언트 컨텍스트에 현재 구조 저장
-            if current_structure:
-                client_context['current_structure'] = current_structure
-                logger.info(f"Received structure from client for {client_id}: {len(current_structure)} characters")
-        except Exception as e:
-            logger.warning(f"Failed to parse JSON request: {e}")
-            user_query = request.data.decode('utf-8')
-    else:
-        user_query = request.data.decode('utf-8')
+        user_query = data.get('query', '')
+        current_structure = data.get('structureJson', '')
+        
+        # 클라이언트 컨텍스트에 현재 구조 저장
+        if current_structure:
+            client_context['current_structure'] = current_structure
+            logger.info(f"Received structure from client for {client_id}: {len(current_structure)} characters")
+        
+        logger.info(f"Processing JSON request for {client_id}: query={user_query[:50]}...")
+        
+    except Exception as e:
+        logger.error(f"Failed to parse JSON request: {e}")
+        return Response(f'Invalid JSON request: {str(e)}', status=400)
     
     def speak_with_queue_wrapper(text, ending_silence_ms, target_client_id):
         target_context = client_manager.get_client_context(target_client_id)

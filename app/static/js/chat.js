@@ -274,25 +274,6 @@ function updateStructureJson(structureData) {
     }
 }
 
-// Function to check if user query is an architecture modification request
-function checkIfModificationRequest(userQuery) {
-    const modificationKeywords = [
-        '수정', '변경', '업데이트', '개선', '추가', '제거', '삭제', 
-        'modify', 'change', 'update', 'improve', 'add', 'remove', 'delete',
-        '바꿔', '고쳐', '수정해', '변경해', '업데이트해', '개선해', '추가해', '제거해', '삭제해'
-    ]
-    const architectureKeywords = [
-        '아키텍처', '구조', '다이어그램', '설계', 
-        'architecture', 'diagram', 'structure', 'design'
-    ]
-    
-    const queryLower = userQuery.toLowerCase()
-    const hasModification = modificationKeywords.some(keyword => queryLower.includes(keyword))
-    const hasArchitecture = architectureKeywords.some(keyword => queryLower.includes(keyword))
-    
-    return hasModification && hasArchitecture
-}
-
 // Function to clear stream buffer (call when response is complete)
 function clearStreamBuffer() {
     let finalText = streamBuffer
@@ -930,7 +911,22 @@ function handleUserQuery(userQuery) {
     currentAssistantMessage = null
     
     if (socket !== undefined) {
-        socket.emit('message', { clientId: clientId, path: 'api.chat', systemPrompt: document.getElementById('prompt').value, userQuery: userQuery })
+        // 현재 structureJson 가져오기
+        const structureTextarea = document.getElementById('structureJson')
+        const currentStructure = structureTextarea ? structureTextarea.value : ''
+        
+        // WebSocket에서도 JSON 구조로 전송
+        const messageData = {
+            query: userQuery,
+            structureJson: currentStructure
+        }
+        
+        socket.emit('message', { 
+            clientId: clientId, 
+            path: 'api.chat', 
+            systemPrompt: document.getElementById('prompt').value, 
+            messageData: messageData 
+        })
         isFirstResponseChunk = true
         return
     }
@@ -939,25 +935,13 @@ function handleUserQuery(userQuery) {
     const structureTextarea = document.getElementById('structureJson')
     const currentStructure = structureTextarea ? structureTextarea.value : ''
     
-    // 아키텍처 수정 요청인지 확인
-    const isModificationRequest = checkIfModificationRequest(userQuery)
-    
-    let requestData
-    let contentType
-    
-    if (isModificationRequest && currentStructure) {
-        // JSON 형태로 요청 데이터 구성
-        requestData = JSON.stringify({
-            query: userQuery,
-            structureJson: currentStructure
-        })
-        contentType = 'application/json'
-        console.log('Sending modification request with current structure')
-    } else {
-        // 기존 텍스트 형태 유지
-        requestData = userQuery
-        contentType = 'text/plain'
-    }
+    // 항상 JSON 형태로 요청 데이터 구성
+    const requestData = JSON.stringify({
+        query: userQuery,
+        structureJson: currentStructure
+    })
+    const contentType = 'application/json'
+    console.log('Sending request as JSON with structure data')
 
     fetch('/api/chat', {
         method: 'POST',
@@ -1071,22 +1055,22 @@ function handleUserQuery(userQuery) {
 }
 
 // Handle local video. If the user is not speaking for 15 seconds, switch to local video.
-function handleLocalVideo() {
-    if (lastSpeakTime === undefined) {
-        return
-    }
+// function handleLocalVideo() {
+//     if (lastSpeakTime === undefined) {
+//         return
+//     }
 
-    let currentTime = new Date()
-    if (currentTime - lastSpeakTime > 15000) {
-        if (document.getElementById('useLocalVideoForIdle').checked && sessionActive && !isSpeaking) {
-            disconnectAvatar()
-            userClosedSession = true // Indicating the session was closed on purpose, not due to network issue
-            document.getElementById('localVideo').hidden = false
-            document.getElementById('remoteVideo').style.width = '0.1px'
-            sessionActive = false
-        }
-    }
-}
+//     let currentTime = new Date()
+//     if (currentTime - lastSpeakTime > 15000) {
+//         if (document.getElementById('useLocalVideoForIdle').checked && sessionActive && !isSpeaking) {
+//             disconnectAvatar()
+//             userClosedSession = true // Indicating the session was closed on purpose, not due to network issue
+//             document.getElementById('localVideo').hidden = false
+//             document.getElementById('remoteVideo').style.width = '0.1px'
+//             sessionActive = false
+//         }
+//     }
+// }
 
 // Check server status
 function checkServerStatus() {
