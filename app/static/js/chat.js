@@ -109,8 +109,11 @@ function addAssistantMessage(content = '', isComplete = false) {
                 Prism.highlightAllUnder(messageContent)
             }
         } else {
-            // For streaming, just append text
-            messageContent.textContent += content
+            // For streaming, parse as markdown in real-time
+            messageContent.innerHTML = marked.parse(messageContent.textContent + content)
+            if (typeof Prism !== 'undefined') {
+                Prism.highlightAllUnder(messageContent)
+            }
         }
     }
     
@@ -250,11 +253,11 @@ function updateStructureJson(structureData) {
         console.log('Structure JSON successfully updated in textarea:', formattedJson)
         
         // Make the container visible if it was hidden
-        const structureContainer = document.getElementById('structureJsonContainer')
-        if (structureContainer) {
-            structureContainer.style.display = 'block'
-            console.log('Structure JSON container made visible')
-        }
+        // const structureContainer = document.getElementById('structureJsonContainer')
+        // if (structureContainer) {
+        //     structureContainer.style.display = 'block'
+        //     console.log('Structure JSON container made visible')
+        // }
         
     } catch (error) {
         console.error('Invalid JSON in STRUCTURE tag:', error, 'Raw data:', structureData)
@@ -266,8 +269,28 @@ function updateStructureJson(structureData) {
         const structureContainer = document.getElementById('structureJsonContainer')
         if (structureContainer) {
             structureContainer.style.display = 'block'
+            console.log('Structure JSON container made visible with raw data')
         }
     }
+}
+
+// Function to check if user query is an architecture modification request
+function checkIfModificationRequest(userQuery) {
+    const modificationKeywords = [
+        '수정', '변경', '업데이트', '개선', '추가', '제거', '삭제', 
+        'modify', 'change', 'update', 'improve', 'add', 'remove', 'delete',
+        '바꿔', '고쳐', '수정해', '변경해', '업데이트해', '개선해', '추가해', '제거해', '삭제해'
+    ]
+    const architectureKeywords = [
+        '아키텍처', '구조', '다이어그램', '설계', 
+        'architecture', 'diagram', 'structure', 'design'
+    ]
+    
+    const queryLower = userQuery.toLowerCase()
+    const hasModification = modificationKeywords.some(keyword => queryLower.includes(keyword))
+    const hasArchitecture = architectureKeywords.some(keyword => queryLower.includes(keyword))
+    
+    return hasModification && hasArchitecture
 }
 
 // Function to clear stream buffer (call when response is complete)
@@ -599,10 +622,14 @@ function setupWebSocket() {
                 if (currentAssistantMessage) {
                     const messageContent = currentAssistantMessage.querySelector('.message-content')
                     // 실시간 업데이트에서도 다이어그램과 스트럭처 태그 제거
-                    let currentText = messageContent.textContent
+                    let currentText = messageContent.textContent || ''
                     let newText = currentText + processedText
                     let cleanedText = newText.replace(/<DIAGRAM>.*?<\/DIAGRAM>/g, '').replace(/<STRUCTURE>.*?<\/STRUCTURE>/gs, '')
-                    messageContent.textContent = cleanedText
+                    // 실시간으로 마크다운 파싱 적용
+                    messageContent.innerHTML = marked.parse(cleanedText)
+                    if (typeof Prism !== 'undefined') {
+                        Prism.highlightAllUnder(messageContent)
+                    }
                     
                     // Scroll to bottom
                     const chatHistory = document.getElementById('chatHistory')
@@ -908,14 +935,38 @@ function handleUserQuery(userQuery) {
         return
     }
 
+    // 현재 structureJson 가져오기
+    const structureTextarea = document.getElementById('structureJson')
+    const currentStructure = structureTextarea ? structureTextarea.value : ''
+    
+    // 아키텍처 수정 요청인지 확인
+    const isModificationRequest = checkIfModificationRequest(userQuery)
+    
+    let requestData
+    let contentType
+    
+    if (isModificationRequest && currentStructure) {
+        // JSON 형태로 요청 데이터 구성
+        requestData = JSON.stringify({
+            query: userQuery,
+            structureJson: currentStructure
+        })
+        contentType = 'application/json'
+        console.log('Sending modification request with current structure')
+    } else {
+        // 기존 텍스트 형태 유지
+        requestData = userQuery
+        contentType = 'text/plain'
+    }
+
     fetch('/api/chat', {
         method: 'POST',
         headers: {
             'ClientId': clientId,
             'SystemPrompt': document.getElementById('prompt').value,
-            'Content-Type': 'text/plain'
+            'Content-Type': contentType
         },
-        body: userQuery
+        body: requestData
     })
     .then(response => {
         if (!response.ok) {
@@ -995,8 +1046,13 @@ function handleUserQuery(userQuery) {
                     // For streaming display, append text content but remove structure/diagram tags
                     if (currentAssistantMessage) {
                         const messageContent = currentAssistantMessage.querySelector('.message-content')
-                        let cleanedText = processedText.replace(/<DIAGRAM>[\s\S]*?<\/DIAGRAM>/g, '').replace(/<STRUCTURE>[\s\S]*?<\/STRUCTURE>/g, '')
-                        messageContent.textContent += cleanedText
+                        // Remove structure and diagram tags from complete response and apply markdown
+                        let cleanedResponse = completeResponse.replace(/<DIAGRAM>[\s\S]*?<\/DIAGRAM>/g, '').replace(/<STRUCTURE>[\s\S]*?<\/STRUCTURE>/g, '')
+                        // 실시간으로 마크다운 파싱 적용
+                        messageContent.innerHTML = marked.parse(cleanedResponse)
+                        if (typeof Prism !== 'undefined') {
+                            Prism.highlightAllUnder(messageContent)
+                        }
                         
                         // Scroll to bottom
                         const chatHistory = document.getElementById('chatHistory')
@@ -1113,6 +1169,9 @@ window.onload = () => {
 
     // Update status indicator
     updateStatusIndicator('Initializing...', 'initializing')
+    
+    // Initialize type message box to be enabled by default
+    updateTypeMessageBox()
 }
 
 // Update status indicator

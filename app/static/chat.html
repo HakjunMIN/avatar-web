@@ -38,7 +38,7 @@
             <label for="azureOpenAIDeploymentName">Azure OpenAI Deployment Name:</label>
             <input id="azureOpenAIDeploymentName" value="gpt-4.1-mini" type="text" />
             <label for="prompt">System Prompt:</label>
-            <textarea id="prompt">You are an Azure Cloud Architecture Expert. When receiving architecture requirements, call the generate_architecture_diagram function as much as possible. You MUST speak in Korean. When responding, make sure to output \n appropriately. Since this will be used for TTS speech, respond in a friendly, conversational tone.</textarea>
+            <textarea id="prompt">You are an Azure Cloud Architecture Expert. When receiving architecture requirements, call the generate_architecture_diagram function as much as possible. You MUST speak in Korean. Since this will be used for TTS speech, respond in a friendly, conversational tone.</textarea>
             <div>
                 <input type="checkbox" id="enableOyd" onchange="window.updataEnableOyd()">
                 <label for="enableOyd">Enable On Your Data</label>
@@ -137,7 +137,7 @@
                             <h3><i class="fas fa-comments"></i> Conversation</h3>
                             <div class="chat-controls">
                                 <label class="toggle-switch">
-                                    <input type="checkbox" id="showTypeMessage" onchange="window.updateTypeMessageBox()">
+                                    <input type="checkbox" id="showTypeMessage" onchange="window.updateTypeMessageBox()" checked>
                                     <span class="slider"></span>
                                     <span class="label">Type Mode</span>
                                 </label>
@@ -154,7 +154,7 @@
                     </div>
                     <!-- Hidden container to store structure JSON -->
                     <div id="structureJsonContainer" style="display: none;" aria-hidden="true">
-                        <textarea id="structureJson" class="structure-json" readonly></textarea>
+                        <textarea id="structureJson" class="structure-json" readonly hidden></textarea>
                     </div>
                     <div class="logs-container">
                         <div class="logs-header">

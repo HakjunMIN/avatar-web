@@ -61,6 +61,27 @@ class ChatService:
                         "required": ["requirements"]
                     }
                 }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "modify_architecture_diagram",
+                    "description": "기존 Architecture Diagram을 수정합니다. 기존 구조를 바탕으로 변경 요청을 적용합니다.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "requirements": {
+                                "type": "string",
+                                "description": "아키텍처 수정 요청사항 (자연어)"
+                            },
+                            "previous_structure": {
+                                "type": "string",
+                                "description": "기존 아키텍처 구조의 JSON 문자열"
+                            }
+                        },
+                        "required": ["requirements", "previous_structure"]
+                    }
+                }
             }
         ]
     
@@ -85,6 +106,25 @@ class ChatService:
             except Exception as e:
                 logger.exception(f"Exception occurred during architecture diagram generation: {str(e)}")
                 return {"success": False, "error": f"Exception in architecture service: {str(e)}"}
+        
+        elif function_name == "modify_architecture_diagram":
+            requirements = arguments.get("requirements", "")
+            previous_structure = arguments.get("previous_structure", "")
+            logger.info("Processing architecture diagram modification request")
+            logger.debug(f"Modification request: {requirements}")
+            logger.debug(f"Previous structure length: {len(previous_structure)} characters")
+            
+            try:
+                result = self.architecture_service.modify_architecture_diagram(previous_structure, requirements)
+                logger.info(f"Architecture modification completed with success: {result.get('success', False)}")
+                if result.get('success'):
+                    logger.info(f"Modified diagram path: {result.get('diagram_path', 'N/A')}")
+                else:
+                    logger.error(f"Architecture modification error: {result.get('error', 'Unknown error')}")
+                return result
+            except Exception as e:
+                logger.exception(f"Exception occurred during architecture diagram modification: {str(e)}")
+                return {"success": False, "error": f"Exception in architecture modification: {str(e)}"}
         else:
             logger.warning(f"Unknown function: {function_name}")
             return {"success": False, "error": f"Unknown function: {function_name}"}
@@ -153,6 +193,21 @@ class ChatService:
 
         aoai_start_time = datetime.datetime.now(pytz.UTC)
         
+        # 아키텍처 수정 요청인지 확인하고 현재 구조를 메시지에 추가
+        current_structure = client_context.get('current_structure', '')
+        if current_structure and self._is_architecture_modification_request(user_query):
+            # 아키텍처 수정 요청인 경우 시스템 메시지에 현재 구조 정보 추가
+            modification_context = f"""
+
+현재 아키텍처 구조가 있습니다. 사용자가 아키텍처 수정을 요청하면, modify_architecture_diagram 함수를 호출할 때 반드시 previous_structure 파라미터에 아래 JSON 구조를 정확히 전달해주세요:
+
+{current_structure}
+
+사용자 요청을 바탕으로 이 구조를 수정하는 modify_architecture_diagram 함수를 호출해주세요."""
+            
+            chat_message['content'] += modification_context
+            logger.info(f"Added current structure to modification request for client {client_id}")
+        
         # 먼저 Function Calling이 필요한지 확인
         response = azure_openai.chat.completions.create(
             model=azure_openai_deployment_name,
@@ -190,6 +245,21 @@ class ChatService:
                     if speak_callback:
                         speak_callback("아키텍처 다이어그램을 생성하고 있습니다.", 0, client_id)
                 
+                elif function_name == "modify_architecture_diagram":
+                    requirements = function_args.get("requirements", "")
+                    previous_structure = function_args.get("previous_structure", "")
+                    
+                    logger.info("Architecture diagram modification started")
+                    logger.debug(f"Modification request: {requirements}")
+                    
+                    # 단계별 진행 상황 메시지
+                    yield "🔄 기존 아키텍처를 분석하고 있습니다...\n\n"
+                    yield f"📝 수정 요청: {requirements}\n\n"
+                    yield "🎨 아키텍처 다이어그램을 수정 중입니다...\n\n"
+                    
+                    if speak_callback:
+                        speak_callback("아키텍처 다이어그램을 수정하고 있습니다.", 0, client_id)
+                
                 # 아키텍처 다이어그램 생성 함수 호출
                 logger.debug(f"Calling function handler for {function_name}")
                 result = self.handle_function_call(function_name, function_args)
@@ -201,14 +271,18 @@ class ChatService:
                     description = result['description']
                     structure = result['structure']
                     
-                    logger.info(f"Diagram generated successfully: {diagram_path}")
+                    logger.info(f"Diagram processed successfully: {diagram_path}")
                     logger.debug(f"Description length: {len(description) if description else 0} characters")
                     
                     # 완료 메시지
-                    yield "✅ 다이어그램 생성이 완료되었습니다!\n\n"
-                    
-                    if speak_callback:
-                        speak_callback("다이어그램 생성이 완료되었습니다.", 0, client_id)
+                    if function_name == "generate_architecture_diagram":
+                        yield "✅ 다이어그램 생성이 완료되었습니다!\n\n"
+                        if speak_callback:
+                            speak_callback("다이어그램 생성이 완료되었습니다.", 0, client_id)
+                    elif function_name == "modify_architecture_diagram":
+                        yield "✅ 다이어그램 수정이 완료되었습니다!\n\n"
+                        if speak_callback:
+                            speak_callback("다이어그램 수정이 완료되었습니다.", 0, client_id)
                     
                     # 다이어그램 경로와 설명을 클라이언트에게 전송
                     yield f"<DIAGRAM>{diagram_path}</DIAGRAM>"
@@ -234,7 +308,13 @@ class ChatService:
                     assistant_reply = description
                 else:
                     # 오류 발생 시
-                    error_message = f"다이어그램 생성 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}"
+                    if function_name == "generate_architecture_diagram":
+                        error_message = f"다이어그램 생성 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}"
+                    elif function_name == "modify_architecture_diagram":
+                        error_message = f"다이어그램 수정 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}"
+                    else:
+                        error_message = f"작업 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}"
+                    
                     logger.error(f"Function call error: {result.get('error', 'Unknown error')}")
                     yield error_message
                     assistant_reply = error_message
@@ -308,6 +388,24 @@ class ChatService:
             'content': assistant_reply
         }
         messages.append(assistant_message)
+
+    def _is_architecture_modification_request(self, user_query: str) -> bool:
+        """사용자 쿼리가 아키텍처 수정 요청인지 확인합니다."""
+        modification_keywords = [
+            '수정', '변경', '업데이트', '개선', '추가', '제거', '삭제', 
+            'modify', 'change', 'update', 'improve', 'add', 'remove', 'delete',
+            '바꿔', '고쳐', '수정해', '변경해', '업데이트해', '개선해', '추가해', '제거해', '삭제해'
+        ]
+        architecture_keywords = [
+            '아키텍처', '구조', '다이어그램', '설계', 
+            'architecture', 'diagram', 'structure', 'design'
+        ]
+        
+        query_lower = user_query.lower()
+        has_modification = any(keyword in query_lower for keyword in modification_keywords)
+        has_architecture = any(keyword in query_lower for keyword in architecture_keywords)
+        
+        return has_modification and has_architecture
 
 
 chat_service = ChatService()
