@@ -251,13 +251,13 @@ function updateStructureJson(structureData) {
         
         structureTextarea.value = formattedJson
         console.log('Structure JSON successfully updated in textarea:', formattedJson)
-        
+
         // Make the container visible if it was hidden
-        // const structureContainer = document.getElementById('structureJsonContainer')
-        // if (structureContainer) {
-        //     structureContainer.style.display = 'block'
-        //     console.log('Structure JSON container made visible')
-        // }
+        const structureContainer = document.getElementById('structureJsonContainer')
+        if (structureContainer) {
+            structureContainer.style.display = 'block'
+            console.log('Structure JSON container made visible')
+        }
         
     } catch (error) {
         console.error('Invalid JSON in STRUCTURE tag:', error, 'Raw data:', structureData)
@@ -1554,3 +1554,6 @@ window.updateLocalVideoForIdle = () => {
 window.onbeforeunload = () => {
     navigator.sendBeacon('/api/releaseClient', JSON.stringify({ clientId: clientId }))
 }
+
+
+

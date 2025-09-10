@@ -13,6 +13,7 @@ from service.client_manager import ClientManager
 from service.avatar_service import AvatarService
 from service.stt_service import STTService
 from service.chat_service import chat_service
+from service.architecture_diagram_service import ArchitectureDiagramService
 from util.vad_iterator import VADService
 from handler.websocket_handler import WebSocketHandler
 
@@ -62,8 +63,11 @@ vad_service = VADService(
     speech_pad_ms=100
 )
 
+# 아키텍처 다이어그램 서비스 초기화
+architecture_service = ArchitectureDiagramService()
+
 websocket_handler = WebSocketHandler(
-    client_manager, avatar_service, stt_service, chat_service, vad_service
+    client_manager, avatar_service, stt_service, chat_service, vad_service, architecture_service
 )
 
 chat_service.set_client_contexts(client_manager.get_all_contexts())

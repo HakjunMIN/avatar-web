@@ -186,6 +186,16 @@ body {
     box-shadow: var(--shadow);
 }
 
+.control-btn.bicep {
+    background: linear-gradient(135deg, #FF6B35, #F7931E);
+    color: white;
+}
+
+.control-btn.bicep:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+}
+
 .control-btn:disabled {
     background: var(--light-color);
     color: var(--text-secondary);
@@ -209,7 +219,8 @@ body {
     gap: 2rem;
     flex: 1;
     /* Make the grid take full remaining viewport height */
-    min-height: calc(100vh - 210px); /* header + controls approximate */
+    height: calc(100vh - 210px); /* header + controls approximate */
+    min-height: calc(100vh - 210px);
 }
 
 /* Video Section */
@@ -289,6 +300,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 1rem;
+    height: 100%;
 }
 
 .chat-container {
@@ -300,10 +312,8 @@ body {
     flex: 1;
     display: flex;
     flex-direction: column;
-    /* Fixed height to prevent size changes */
-    height: 500px;
-    max-height: 500px;
-    min-height: 500px;
+    /* Remove fixed height to allow flexible sizing */
+    height: 100%;
 }
 
 .chat-header {
@@ -389,10 +399,8 @@ body {
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    /* Fixed height to prevent expansion */
-    height: calc(100% - 120px); /* Subtract header and input areas */
-    max-height: calc(100% - 120px);
-    min-height: calc(100% - 120px);
+    /* Make it flexible to fill available space */
+    height: 100%;
 }
 
 .chat-history {
@@ -738,6 +746,32 @@ body {
     line-height: 1.4;
     color: var(--text-secondary);
     overflow-y: auto;
+}
+
+/* Structure JSON Container */
+#structureJsonContainer {
+    background: var(--card-bg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border-color);
+    max-height: 200px;
+    display: flex;
+    flex-direction: column;
+}
+
+.structure-json {
+    flex: 1;
+    padding: 1rem;
+    border: none;
+    outline: none;
+    resize: none;
+    background: transparent;
+    font-family: 'Courier New', monospace;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--text-secondary);
+    overflow-y: auto;
+    min-height: 100px;
 }
 
 /* Responsive Design */

@@ -74,12 +74,29 @@ class ChatService:
                                 "type": "string",
                                 "description": "아키텍처 수정 요청사항 (자연어)"
                             },
-                            "previous_structure": {
+                            "structure_json": {
                                 "type": "string",
                                 "description": "기존 아키텍처 구조의 JSON 문자열"
                             }
                         },
-                        "required": ["requirements", "previous_structure"]
+                        "required": ["requirements", "structure_json"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "generate_bicep_infrastructure",
+                    "description": "아키텍처 구조 JSON을 받아서 배포 가능한 Azure Bicep 인프라 코드를 생성합니다. 사용자가 '배포', '인프라 코드', 'Bicep' 등의 키워드를 언급할 때 사용합니다.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "structure_json": {
+                                "type": "string",
+                                "description": "아키텍처 구조의 JSON 문자열"
+                            }
+                        },
+                        "required": ["structure_json"]
                     }
                 }
             }
@@ -109,13 +126,13 @@ class ChatService:
         
         elif function_name == "modify_architecture_diagram":
             requirements = arguments.get("requirements", "")
-            previous_structure = arguments.get("previous_structure", "")
+            structure_json = arguments.get("structure_json", "")
             logger.info("Processing architecture diagram modification request")
             logger.debug(f"Modification request: {requirements}")
-            logger.debug(f"Previous structure length: {len(previous_structure)} characters")
+            logger.debug(f"Structure JSON length: {len(structure_json)} characters")
             
             try:
-                result = self.architecture_service.modify_architecture_diagram(previous_structure, requirements)
+                result = self.architecture_service.modify_architecture_diagram(structure_json, requirements)
                 logger.info(f"Architecture modification completed with success: {result.get('success', False)}")
                 if result.get('success'):
                     logger.info(f"Modified diagram path: {result.get('diagram_path', 'N/A')}")
@@ -125,6 +142,24 @@ class ChatService:
             except Exception as e:
                 logger.exception(f"Exception occurred during architecture diagram modification: {str(e)}")
                 return {"success": False, "error": f"Exception in architecture modification: {str(e)}"}
+        
+        elif function_name == "generate_bicep_infrastructure":
+            structure_json = arguments.get("structure_json", "")
+            logger.info("Processing Bicep infrastructure code generation request")
+            logger.debug(f"Structure JSON length: {len(structure_json)} characters")
+            
+            try:
+                result = self.architecture_service.generate_bicep_infrastructure(structure_json)
+                logger.info(f"Bicep generation completed with success: {result.get('success', False)}")
+                if result.get('success'):
+                    logger.info(f"Generated Bicep code length: {len(result.get('bicep_code', ''))} characters")
+                else:
+                    logger.error(f"Bicep generation error: {result.get('error', 'Unknown error')}")
+                return result
+            except Exception as e:
+                logger.exception(f"Exception occurred during Bicep code generation: {str(e)}")
+                return {"success": False, "error": f"Exception in Bicep generation: {str(e)}"}
+        
         else:
             logger.warning(f"Unknown function: {function_name}")
             return {"success": False, "error": f"Unknown function: {function_name}"}
@@ -199,7 +234,7 @@ class ChatService:
             # 아키텍처 수정 요청인 경우 시스템 메시지에 현재 구조 정보 추가
             modification_context = f"""
 
-현재 아키텍처 구조가 있습니다. 사용자가 아키텍처 수정을 요청하면, modify_architecture_diagram 함수를 호출할 때 반드시 previous_structure 파라미터에 아래 JSON 구조를 정확히 전달해주세요:
+현재 아키텍처 구조가 있습니다. 사용자가 아키텍처 수정을 요청하면, modify_architecture_diagram 함수를 호출할 때 반드시 structure_json 파라미터에 아래 JSON 구조를 정확히 전달해주세요:
 
 {current_structure}
 
@@ -207,6 +242,20 @@ class ChatService:
             
             chat_message['content'] += modification_context
             logger.info(f"Added current structure to modification request for client {client_id}")
+        
+        # Bicep 배포 요청인지 확인하고 현재 구조를 메시지에 추가
+        elif current_structure and self._is_bicep_deployment_request(user_query):
+            # Bicep 배포 요청인 경우 시스템 메시지에 현재 구조 정보 추가
+            bicep_context = f"""
+
+현재 아키텍처 구조가 있습니다. 사용자가 배포 또는 인프라 코드 생성을 요청하면, generate_bicep_infrastructure 함수를 호출할 때 반드시 structure_json 파라미터에 아래 JSON 구조를 정확히 전달해주세요:
+
+{current_structure}
+
+사용자 요청을 바탕으로 이 구조를 Bicep 인프라 코드로 변환하는 generate_bicep_infrastructure 함수를 호출해주세요."""
+            
+            chat_message['content'] += bicep_context
+            logger.info(f"Added current structure to Bicep generation request for client {client_id}")
         
         # 먼저 Function Calling이 필요한지 확인
         response = azure_openai.chat.completions.create(
@@ -247,7 +296,7 @@ class ChatService:
                 
                 elif function_name == "modify_architecture_diagram":
                     requirements = function_args.get("requirements", "")
-                    previous_structure = function_args.get("previous_structure", "")
+                    structure_json = function_args.get("structure_json", "")
                     
                     logger.info("Architecture diagram modification started")
                     logger.debug(f"Modification request: {requirements}")
@@ -260,58 +309,121 @@ class ChatService:
                     if speak_callback:
                         speak_callback("아키텍처 다이어그램을 수정하고 있습니다.", 0, client_id)
                 
+                elif function_name == "generate_bicep_infrastructure":
+                    structure_json = function_args.get("structure_json", "")
+                    
+                    logger.info("Bicep infrastructure code generation started")
+                    logger.debug(f"Structure JSON length: {len(structure_json)} characters")
+                    
+                    # 단계별 진행 상황 메시지
+                    yield "🔄 아키텍처 구조를 분석하고 있습니다...\n\n"
+                    yield "☁️ Azure Bicep 인프라 코드를 생성 중입니다...\n\n"
+                    yield "📝 배포 가이드를 작성하고 있습니다...\n\n"
+                    
+                    if speak_callback:
+                        speak_callback("비셉 인프라 코드를 생성하고 있습니다.", 0, client_id)
+                
                 # 아키텍처 다이어그램 생성 함수 호출
                 logger.debug(f"Calling function handler for {function_name}")
                 result = self.handle_function_call(function_name, function_args)
                 logger.debug(f"Function result: {result}")
                 
                 if result['success']:
-                    # 다이어그램이 성공적으로 생성된 경우
-                    diagram_path = result['diagram_path']
-                    description = result['description']
-                    structure = result['structure']
-                    
-                    logger.info(f"Diagram processed successfully: {diagram_path}")
-                    logger.debug(f"Description length: {len(description) if description else 0} characters")
-                    
-                    # 완료 메시지
-                    if function_name == "generate_architecture_diagram":
-                        yield "✅ 다이어그램 생성이 완료되었습니다!\n\n"
+                    if function_name == "generate_bicep_infrastructure":
+                        # Bicep 코드 생성 성공
+                        bicep_code = result.get('bicep_code', '')
+                        parameters_file = result.get('parameters_file', '')
+                        deployment_guide = result.get('deployment_guide', '')
+                        resource_count = result.get('resource_count', 0)
+                        
+                        logger.info(f"Bicep code generated successfully: {len(bicep_code)} characters")
+                        
+                        # Bicep 생성에 사용된 구조를 클라이언트 컨텍스트에 저장
+                        # function_args에서 structure_json을 가져와서 저장
+                        structure_json = function_args.get("structure_json", "")
+                        if structure_json:
+                            client_context['current_structure'] = structure_json
+                            logger.info(f"Saved structure_json to current_structure for client {client_id}")
+                        
+                        # 완료 메시지
+                        yield "✅ Bicep 인프라 코드 생성이 완료되었습니다!\n\n"
+                        
                         if speak_callback:
-                            speak_callback("다이어그램 생성이 완료되었습니다.", 0, client_id)
-                    elif function_name == "modify_architecture_diagram":
-                        yield "✅ 다이어그램 수정이 완료되었습니다!\n\n"
-                        if speak_callback:
-                            speak_callback("다이어그램 수정이 완료되었습니다.", 0, client_id)
+                            speak_callback("비셉 인프라 코드 생성이 완료되었습니다.", 0, client_id)
+                        
+                        # Bicep 코드 출력
+                        if bicep_code:
+                            yield "## 📄 main.bicep\n\n"
+                            yield "```bicep\n"
+                            yield bicep_code
+                            yield "\n```\n\n"
+                        
+                        # 파라미터 파일 출력
+                        if parameters_file:
+                            yield "## ⚙️ main.bicepparam\n\n"
+                            yield "```bicepparam\n"
+                            yield parameters_file
+                            yield "\n```\n\n"
+                        
+                        # 배포 가이드 출력
+                        if deployment_guide:
+                            yield deployment_guide
+                        
+                        assistant_reply = f"Bicep 인프라 코드가 성공적으로 생성되었습니다. 총 {resource_count}개의 리소스가 포함되어 있습니다."
                     
-                    # 다이어그램 경로와 설명을 클라이언트에게 전송
-                    yield f"<DIAGRAM>{diagram_path}</DIAGRAM>"
+                    else:
+                        # 기존 다이어그램 생성/수정 처리
+                        diagram_path = result['diagram_path']
+                        description = result['description']
+                        structure = result['structure']
+                        
+                        logger.info(f"Diagram processed successfully: {diagram_path}")
+                        logger.debug(f"Description length: {len(description) if description else 0} characters")
+                        
+                        # 클라이언트 컨텍스트에 현재 구조 저장
+                        client_context['current_structure'] = structure
+                        logger.info(f"Updated current_structure for client {client_id}")
+                        
+                        # 완료 메시지
+                        if function_name == "generate_architecture_diagram":
+                            yield "✅ 다이어그램 생성이 완료되었습니다!\n\n"
+                            if speak_callback:
+                                speak_callback("다이어그램 생성이 완료되었습니다.", 0, client_id)
+                        elif function_name == "modify_architecture_diagram":
+                            yield "✅ 다이어그램 수정이 완료되었습니다!\n\n"
+                            if speak_callback:
+                                speak_callback("다이어그램 수정이 완료되었습니다.", 0, client_id)
+                        
+                        # 다이어그램 경로와 설명을 클라이언트에게 전송
+                        yield f"<DIAGRAM>{diagram_path}</DIAGRAM>"
 
-                     # 다이어그램 스트럭쳐를 클라이언트에게 전송
-                    yield f"<STRUCTURE>{structure}</STRUCTURE>"
-                    
-                    # 설명을 스트리밍으로 전송
-                    if description:
-                        for char in description:
-                            yield char
-                            if speak_callback and char in sentence_level_punctuations:
-                                if spoken_sentence.strip():
-                                    speak_callback(spoken_sentence.strip(), 0, client_id)
-                                    spoken_sentence = ''
-                            else:
-                                spoken_sentence += char
-                    
-                    # 마지막 문장 처리
-                    if spoken_sentence.strip() and speak_callback:
-                        speak_callback(spoken_sentence.strip(), 0, client_id)
-                    
-                    assistant_reply = description
+                         # 다이어그램 스트럭쳐를 클라이언트에게 전송
+                        yield f"<STRUCTURE>{structure}</STRUCTURE>"
+                        
+                        # 설명을 스트리밍으로 전송
+                        if description:
+                            for char in description:
+                                yield char
+                                if speak_callback and char in sentence_level_punctuations:
+                                    if spoken_sentence.strip():
+                                        speak_callback(spoken_sentence.strip(), 0, client_id)
+                                        spoken_sentence = ''
+                                else:
+                                    spoken_sentence += char
+                        
+                        # 마지막 문장 처리
+                        if spoken_sentence.strip() and speak_callback:
+                            speak_callback(spoken_sentence.strip(), 0, client_id)
+                        
+                        assistant_reply = description
                 else:
                     # 오류 발생 시
                     if function_name == "generate_architecture_diagram":
                         error_message = f"다이어그램 생성 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}"
                     elif function_name == "modify_architecture_diagram":
                         error_message = f"다이어그램 수정 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}"
+                    elif function_name == "generate_bicep_infrastructure":
+                        error_message = f"Bicep 코드 생성 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}"
                     else:
                         error_message = f"작업 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}"
                     
@@ -388,6 +500,17 @@ class ChatService:
             'content': assistant_reply
         }
         messages.append(assistant_message)
+
+    def _is_bicep_deployment_request(self, user_query: str) -> bool:
+        """사용자 쿼리가 Bicep 배포 요청인지 확인합니다."""
+        deployment_keywords = [
+            '배포', '인프라', '코드', 'bicep', 'deploy', 'deployment', 'infrastructure', 
+            '배포해', '배포해줘', '배포해주세요', '인프라 코드', '배포 코드', '비셉',
+            '클라우드 배포', 'IaC', 'infrastructure as code'
+        ]
+        
+        query_lower = user_query.lower()
+        return any(keyword in query_lower for keyword in deployment_keywords)
 
     def _is_architecture_modification_request(self, user_query: str) -> bool:
         """사용자 쿼리가 아키텍처 수정 요청인지 확인합니다."""

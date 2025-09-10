@@ -168,33 +168,33 @@ class ArchitectureDiagramService:
                 'description': None
             }
     
-    def modify_architecture_diagram(self, previous_structure: str, requirements: str) -> Dict[str, Any]:
+    def modify_architecture_diagram(self, structure_json: str, requirements: str) -> Dict[str, Any]:
         """
         기존 아키텍처를 수정하는 기능입니다.
         
         Args:
-            previous_structure: 기존 아키텍처 구조 JSON 문자열 (chat.html의 structureJson에서 가져옴)
+            structure_json: 기존 아키텍처 구조 JSON 문자열 (chat.html의 structureJson에서 가져옴)
             requirements: 수정 요구사항
             
         Returns:
             Dict containing modified diagram path and description (generate_architecture_diagram과 동일한 형태)
         """
         logger.info("Starting architecture modification")
-        logger.debug(f"Previous structure: {previous_structure}")
+        logger.debug(f"Structure JSON: {structure_json}")
         logger.debug(f"Requirements: {requirements}")
         
         try:
             # 기존 구조가 비어있는 경우 새로 생성
-            if not previous_structure or previous_structure.strip() == "":
-                logger.info("Previous structure is empty, generating new architecture")
+            if not structure_json or structure_json.strip() == "":
+                logger.info("Structure JSON is empty, generating new architecture")
                 return self.generate_architecture_diagram(requirements)
             
             # 기존 구조 파싱
             try:
-                previous_structure_dict = json.loads(previous_structure)
+                previous_structure_dict = json.loads(structure_json)
                 logger.debug(f"Parsed previous structure: {previous_structure_dict}")
             except json.JSONDecodeError as e:
-                logger.warning(f"Failed to parse previous structure JSON: {e}")
+                logger.warning(f"Failed to parse structure JSON: {e}")
                 logger.info("Falling back to new architecture generation")
                 return self.generate_architecture_diagram(requirements)
             
@@ -295,16 +295,57 @@ class ArchitectureDiagramService:
             content = response.choices[0].message.content
             logger.debug(f"OpenAI response content: {content}")
             
-            # JSON 추출
-            start_idx = content.find('{')
-            end_idx = content.rfind('}') + 1
-            json_str = content[start_idx:end_idx]
-            
-            logger.debug(f"Extracted JSON: {json_str}")
-            
-            result = json.loads(json_str)
-            logger.debug(f"Parsed JSON structure: {result}")
-            return result
+            # JSON 추출 - 더 견고한 방법으로 개선
+            try:
+                # 여러 방법으로 JSON 추출 시도
+                json_str = None
+                
+                # 방법 1: 첫 번째 { 부터 마지막 } 까지
+                start_idx = content.find('{')
+                if start_idx != -1:
+                    # 중괄호 매칭을 사용하여 올바른 JSON 끝 찾기
+                    brace_count = 0
+                    end_idx = start_idx
+                    for i, char in enumerate(content[start_idx:], start_idx):
+                        if char == '{':
+                            brace_count += 1
+                        elif char == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                end_idx = i + 1
+                                break
+                    json_str = content[start_idx:end_idx]
+                
+                # 방법 2: JSON 코드 블록 찾기
+                if not json_str or json_str == '{}':
+                    import re
+                    json_match = re.search(r'```json\s*(\{.*?\})\s*```', content, re.DOTALL)
+                    if json_match:
+                        json_str = json_match.group(1)
+                
+                # 방법 3: 백틱 없는 JSON 블록
+                if not json_str or json_str == '{}':
+                    json_match = re.search(r'(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})', content, re.DOTALL)
+                    if json_match:
+                        json_str = json_match.group(1)
+                
+                if not json_str:
+                    logger.error("Could not extract JSON from OpenAI response")
+                    logger.error(f"Response content: {content}")
+                    return self._get_default_structure()
+                
+                logger.debug(f"Extracted JSON: {json_str}")
+                
+                # JSON 파싱 시도
+                result = json.loads(json_str)
+                logger.debug(f"Parsed JSON structure: {result}")
+                return result
+                
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse extracted JSON: {e}")
+                logger.error(f"Problematic JSON: {json_str}")
+                logger.error(f"Full OpenAI response: {content}")
+                return self._get_default_structure()
             
         except Exception as e:
             logger.exception(f"OpenAI 분석 오류: {e}")
@@ -749,3 +790,360 @@ class ArchitectureDiagramService:
         formatted_description = f"{diagram_tag}\n\n{description}"
         
         return formatted_description
+
+    def generate_bicep_infrastructure(self, structure_json: str) -> Dict[str, Any]:
+        """
+        아키텍처 구조 JSON을 받아서 Azure Bicep 인프라 코드를 생성합니다.
+        
+        Args:
+            structure_json: 아키텍처 구조 JSON 문자열
+            
+        Returns:
+            Dict containing bicep code and deployment information
+        """
+        logger.info("Starting Bicep infrastructure code generation")
+        logger.info(f"Structure JSON received (first 500 chars): {structure_json[:500] if structure_json else 'None'}")
+        logger.info(f"Structure JSON length: {len(structure_json) if structure_json else 0} characters")
+        
+        try:
+            # JSON 파싱
+            try:
+                # Check for common JSON formatting issues
+                if not structure_json or not structure_json.strip():
+                    logger.error("Empty structure JSON provided")
+                    return {
+                        'success': False,
+                        'error': 'Empty JSON structure provided',
+                        'bicep_code': None,
+                        'deployment_guide': None
+                    }
+                
+                # Clean up the JSON string
+                structure_json = structure_json.strip()
+                
+                # Remove any potential BOM or invisible characters
+                import codecs
+                if structure_json.startswith(codecs.BOM_UTF8.decode('utf-8')):
+                    structure_json = structure_json[1:]
+                
+                # Log the exact JSON around the error position if possible
+                logger.info(f"Attempting to parse JSON: {structure_json}")
+                
+                structure = json.loads(structure_json)
+                logger.debug(f"Parsed structure: {structure}")
+                
+                # Validate structure format
+                if not isinstance(structure, dict):
+                    logger.error(f"Structure is not a dictionary: {type(structure)}")
+                    return {
+                        'success': False,
+                        'error': f'Structure must be a dictionary, got {type(structure)}',
+                        'bicep_code': None,
+                        'deployment_guide': None
+                    }
+                
+                # Ensure required fields exist and are the right type
+                components = structure.get('components', [])
+                if not isinstance(components, list):
+                    logger.warning(f"Components field is not a list, converting from {type(components)}")
+                    structure['components'] = [components] if components else []
+                    
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse structure JSON: {e}")
+                logger.error(f"JSON content around error position (char {e.pos}): '{structure_json[max(0, e.pos-50):e.pos+50]}'")
+                
+                # Try to fix common JSON issues
+                try:
+                    # Remove potential trailing commas
+                    import re
+                    fixed_json = re.sub(r',(\s*[}\]])', r'\1', structure_json)
+                    # Try parsing the fixed JSON
+                    structure = json.loads(fixed_json)
+                    logger.info("Successfully parsed JSON after fixing trailing commas")
+                except json.JSONDecodeError as e2:
+                    logger.error(f"Still failed after attempting to fix JSON: {e2}")
+                    logger.error(f"Full JSON content: '{structure_json}'")
+                    return {
+                        'success': False,
+                        'error': f'Invalid JSON format: {str(e)}',
+                        'bicep_code': None,
+                        'deployment_guide': None
+                    }
+            
+            # OpenAI를 사용하여 Bicep 코드 생성
+            logger.info("Generating Bicep code with OpenAI")
+            bicep_result = self._generate_bicep_with_openai(structure)
+            
+            if not bicep_result:
+                return {
+                    'success': False,
+                    'error': 'Failed to generate Bicep code',
+                    'bicep_code': None,
+                    'deployment_guide': None
+                }
+            
+            # 배포 가이드 생성
+            deployment_guide = self._generate_deployment_guide(structure)
+            
+            result = {
+                'success': True,
+                'bicep_code': bicep_result['bicep_code'],
+                'parameters_file': bicep_result.get('parameters_file', ''),
+                'deployment_guide': deployment_guide,
+                'resource_count': len(structure.get('components', []))
+            }
+            
+            logger.info("Bicep infrastructure code generation completed successfully")
+            return result
+            
+        except Exception as e:
+            logger.exception(f"Error during Bicep code generation: {str(e)}")
+            
+            return {
+                'success': False,
+                'error': str(e),
+                'bicep_code': None,
+                'deployment_guide': None
+            }
+
+    def _generate_bicep_with_openai(self, structure: Dict[str, Any]) -> Dict[str, str]:
+        """
+        OpenAI를 사용하여 아키텍처 구조로부터 Bicep 코드를 생성합니다.
+        """
+        if not self.azure_openai:
+            logger.error("Azure OpenAI client not configured")
+            return None
+        
+        # 아키텍처 구조를 Bicep 생성 프롬프트로 변환
+        bicep_prompt = self._create_bicep_generation_prompt(structure)
+        
+        try:
+            response = self.azure_openai.chat.completions.create(
+                model=azure_openai_deployment_name,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "당신은 Azure Bicep 인프라 코드 생성 전문가입니다. 주어진 아키텍처 구조를 분석하여 완전하고 배포 가능한 Bicep 코드를 생성해주세요. Azure 모범 사례를 따르고, 보안, 가용성, 확장성을 고려한 코드를 작성해주세요."
+                    },
+                    {
+                        "role": "user", 
+                        "content": bicep_prompt
+                    }
+                ],
+                max_tokens=4000,
+                temperature=0.1
+            )
+            
+            bicep_content = response.choices[0].message.content
+            logger.debug(f"Generated Bicep content: {bicep_content}")
+            
+            # Bicep 코드와 파라미터 파일 분리
+            return self._parse_bicep_response(bicep_content)
+            
+        except Exception as e:
+            logger.error(f"Error calling Azure OpenAI for Bicep generation: {e}")
+            return None
+
+    def _create_bicep_generation_prompt(self, structure: Dict[str, Any]) -> str:
+        """
+        아키텍처 구조를 Bicep 생성 프롬프트로 변환합니다.
+        """
+        # Validate and extract structure components
+        components = structure.get('components', [])
+        connections = structure.get('connections', [])
+        title = structure.get('title', 'Azure Infrastructure')
+        
+        # Log structure for debugging
+        logger.debug(f"Components type: {type(components)}, value: {components}")
+        logger.debug(f"Connections type: {type(connections)}, value: {connections}")
+        
+        # Ensure components is a list
+        if not isinstance(components, list):
+            logger.warning(f"Components is not a list, got {type(components)}. Converting to list.")
+            components = [components] if components else []
+        
+        # Ensure connections is a list
+        if not isinstance(connections, list):
+            logger.warning(f"Connections is not a list, got {type(connections)}. Converting to list.")
+            connections = [connections] if connections else []
+        
+        prompt = f"""다음 아키텍처 구조를 기반으로 Azure Bicep 인프라 코드를 생성해주세요:
+
+# 프로젝트: {title}
+
+## 구성 요소:
+"""
+        
+        for i, component in enumerate(components):
+            # Handle case where component might be a string instead of dict
+            if isinstance(component, str):
+                # If component is a string, treat it as both service and label
+                service = component
+                label = component
+            elif isinstance(component, dict):
+                service = component.get('service', '')
+                label = component.get('label', '')
+            else:
+                # Skip invalid component types
+                logger.warning(f"Invalid component type at index {i}: {type(component)}")
+                continue
+            prompt += f"{i+1}. {label} ({service})\n"
+        
+        if connections:
+            prompt += "\n## 연결 관계:\n"
+            for connection in connections:
+                # Handle case where connection might not be a dict
+                if isinstance(connection, dict):
+                    source = connection.get('source', connection.get('from', ''))
+                    target = connection.get('target', connection.get('to', ''))
+                elif isinstance(connection, str):
+                    # If connection is a string, skip it or handle as needed
+                    logger.warning(f"Connection is string instead of dict: {connection}")
+                    continue
+                else:
+                    logger.warning(f"Invalid connection type: {type(connection)}")
+                    continue
+                
+                if source and target:
+                    prompt += f"- {source} → {target}\n"
+        
+        prompt += f"""
+
+## 요구사항:
+1. **Bicep 모범 사례 준수**:
+   - 리소스 명명 규칙 적용 (prefix, suffix, 환경별 구분)
+   - 매개변수와 변수 적절히 사용
+   - 태그를 활용한 리소스 관리
+   - User-Defined Types 활용
+   - @secure() 데코레이터 사용
+
+2. **보안 고려사항**:
+   - Managed Identity 사용
+   - Key Vault 통합
+   - 네트워크 보안 그룹 설정
+   - HTTPS/TLS 강제
+
+3. **운영 고려사항**:
+   - 모니터링 및 로깅 설정
+   - 백업 및 재해 복구
+   - 자동 스케일링 구성
+   - 비용 최적화
+
+4. **출력 형식**:
+   - main.bicep: 메인 인프라 코드
+   - main.bicepparam: 매개변수 파일
+   - 각 파일을 명확하게 구분하여 출력
+
+다음 서비스 매핑을 참고하세요:
+{self.AZURE_SERVICES_DESCRIPTION}
+
+완전하고 배포 가능한 Bicep 코드를 생성해주세요. 각 파일은 ```bicep 또는 ```bicepparam 코드 블록으로 구분하여 출력해주세요."""
+        
+        return prompt
+
+    def _parse_bicep_response(self, bicep_content: str) -> Dict[str, str]:
+        """
+        OpenAI 응답에서 Bicep 코드와 파라미터 파일을 분리합니다.
+        """
+        import re
+        
+        result = {
+            'bicep_code': '',
+            'parameters_file': ''
+        }
+        
+        # Bicep 메인 파일 추출
+        bicep_pattern = r'```bicep\n(.*?)\n```'
+        bicep_matches = re.findall(bicep_pattern, bicep_content, re.DOTALL)
+        if bicep_matches:
+            result['bicep_code'] = bicep_matches[0].strip()
+        
+        # 파라미터 파일 추출
+        param_pattern = r'```bicepparam\n(.*?)\n```'
+        param_matches = re.findall(param_pattern, bicep_content, re.DOTALL)
+        if param_matches:
+            result['parameters_file'] = param_matches[0].strip()
+        
+        # 코드 블록이 없는 경우 전체 응답을 bicep_code로 사용
+        if not result['bicep_code'] and not result['parameters_file']:
+            result['bicep_code'] = bicep_content.strip()
+        
+        return result
+
+    def _generate_deployment_guide(self, structure: Dict[str, Any]) -> str:
+        """
+        배포 가이드를 생성합니다.
+        """
+        title = structure.get('title', 'Azure Infrastructure')
+        components_count = len(structure.get('components', []))
+        
+        guide = f"""# {title} 배포 가이드
+
+## 배포 준비사항
+
+### 1. 사전 요구사항
+- Azure CLI 또는 Azure PowerShell 설치
+- Azure 구독에 대한 기여자 권한
+- Bicep CLI 설치 (`az bicep install`)
+
+### 2. 리소스 그룹 생성
+```bash
+az group create --name rg-{title.lower().replace(' ', '-')} --location koreacentral
+```
+
+### 3. 배포 실행
+
+#### Azure CLI 사용:
+```bash
+# 매개변수 파일이 있는 경우
+az deployment group create \\
+  --resource-group rg-{title.lower().replace(' ', '-')} \\
+  --template-file main.bicep \\
+  --parameters main.bicepparam
+
+# 매개변수를 직접 전달하는 경우
+az deployment group create \\
+  --resource-group rg-{title.lower().replace(' ', '-')} \\
+  --template-file main.bicep \\
+  --parameters environmentName=prod location=koreacentral
+```
+
+#### Azure PowerShell 사용:
+```powershell
+New-AzResourceGroupDeployment `
+  -ResourceGroupName "rg-{title.lower().replace(' ', '-')}" `
+  -TemplateFile "main.bicep" `
+  -TemplateParameterFile "main.bicepparam"
+```
+
+## 배포 후 확인사항
+
+### 1. 리소스 상태 확인
+```bash
+az resource list --resource-group rg-{title.lower().replace(' ', '-')} --output table
+```
+
+### 2. 연결 테스트
+- 웹 애플리케이션 엔드포인트 접근 확인
+- 데이터베이스 연결 테스트
+- API 엔드포인트 동작 확인
+
+### 3. 모니터링 설정
+- Azure Monitor 대시보드 확인
+- 알림 규칙 설정
+- 로그 분석 쿼리 설정
+
+## 예상 배포 시간
+- 리소스 수: {components_count}개
+- 예상 소요시간: {components_count * 3}-{components_count * 5}분
+
+## 비용 예상
+배포된 리소스의 월간 예상 비용은 Azure 가격 계산기를 통해 확인하세요:
+https://azure.microsoft.com/pricing/calculator/
+
+## 문제 해결
+- 권한 오류: 구독에 대한 기여자 권한 확인
+- 리소스 이름 충돌: 매개변수 파일에서 고유한 이름 접미사 설정
+- 배포 실패: `az deployment group show` 명령으로 오류 세부사항 확인"""
+        
+        return guide
