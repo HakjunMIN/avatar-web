@@ -7,13 +7,14 @@ from openai import AzureOpenAI
 
 try:
     from diagrams import Diagram, Cluster, Edge
-    from diagrams.azure.compute import AppServices, FunctionApps, ContainerInstances, VM   
+    from diagrams.azure.compute import AppServices, FunctionApps, ContainerInstances, VM, ContainerApps, KubernetesServices   
     from diagrams.azure.database import DatabaseForPostgresqlServers, CosmosDb, SQLDatabases
     from diagrams.azure.storage import StorageAccounts, BlobStorage
-    from diagrams.azure.network import LoadBalancers, ApplicationGateway, CDNProfiles, VirtualNetworks
+    from diagrams.azure.network import LoadBalancers, ApplicationGateway, CDNProfiles, VirtualNetworks, Subnets
     from diagrams.azure.integration import ServiceBus, LogicApps, APIManagement
     from diagrams.azure.analytics import SynapseAnalytics, DataFactories, EventHubs
-    from diagrams.azure.ml import MachineLearningServiceWorkspaces
+    from diagrams.azure.ml import MachineLearningServiceWorkspaces, CognitiveServices, AzureOpenAI as OpenAI
+    from diagrams.azure.monitor import Monitor
     from diagrams.azure.security import KeyVaults, SecurityCenter
     from diagrams.azure.devops import Devops
     from diagrams.onprem.client import Users
@@ -44,6 +45,8 @@ class ArchitectureDiagramService:
             'app_service': AppServices,
             'function_app': FunctionApps,
             'container_instances': ContainerInstances,
+            'container_apps': ContainerApps,
+            'kubernetes_services': KubernetesServices,
             'virtual_machines': VM,
             'postgresql': DatabaseForPostgresqlServers,
             'cosmos_db': CosmosDb,
@@ -54,6 +57,7 @@ class ArchitectureDiagramService:
             'application_gateway': ApplicationGateway,
             'cdn': CDNProfiles,
             'virtual_network': VirtualNetworks,
+            'subnet': Subnets,
             'api_management': APIManagement,
             'service_bus': ServiceBus,
             'event_hubs': EventHubs,
@@ -61,10 +65,13 @@ class ArchitectureDiagramService:
             'synapse': SynapseAnalytics,
             'data_factory': DataFactories,
             'ml_workspace': MachineLearningServiceWorkspaces,
+            'cognitive_services': CognitiveServices,
+            'openai': OpenAI,
             'key_vault': KeyVaults,
             'security_center': SecurityCenter,
             'devops': Devops,
-            'users': Users
+            'users': Users,
+            'monitor': Monitor
         }
     
     def generate_architecture_diagram(self, requirements: str) -> Dict[str, Any]:
@@ -130,7 +137,9 @@ class ArchitectureDiagramService:
         - app_service: Azure App Service (웹 애플리케이션)
         - function_app: Azure Functions (서버리스 함수)
         - container_instances: Azure Container Instances
-        - virtual_machines: Azure Virtual Machines
+        - virtual_machines: Azure Virtual Machines, 
+        - container_apps: Azure Container Apps
+        - kubernetes_services: Azure Kubernetes Services
         - postgresql: Azure Database for PostgreSQL
         - cosmos_db: Azure Cosmos DB
         - sql_database: Azure SQL Database
@@ -146,7 +155,10 @@ class ArchitectureDiagramService:
         - logic_apps: Azure Logic Apps
         - synapse: Azure Synapse Analytics
         - data_factory: Azure Data Factory
-        - ml_workspace: Azure Machine Learning
+        - ml_workspace: Azure Machine Learning, 
+        - cognitive_services: Azure Cognitive Services
+        - openai: Azure OpenAI
+        - monitor: Azure Monitor
         - key_vault: Azure Key Vault
         - security_center: Azure Security Center
         - devops: Azure DevOps
