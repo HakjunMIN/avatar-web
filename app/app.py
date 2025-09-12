@@ -307,6 +307,32 @@ def serveDiagram(diagram_path):
         return Response(f"Error serving diagram: {e}", status=500)
 
 
+@app.route("/api/update_structure", methods=["POST"])
+def updateStructure():
+    """구조 JSON 업데이트 엔드포인트"""
+    try:
+        client_id = uuid.UUID(request.headers.get('ClientId'))
+        data = request.get_json()
+        
+        if not data:
+            return Response('JSON request body required', status=400)
+            
+        structure_json = data.get('structureJson', '')
+        
+        if structure_json:
+            client_context = client_manager.get_client_context(client_id)
+            client_context['current_structure'] = structure_json
+            logger.info(f"Updated current_structure for client {client_id} via HTTP API (length: {len(structure_json)})")
+            return Response('Structure updated successfully', status=200)
+        else:
+            logger.warning(f"No structure JSON provided in update request for client {client_id}")
+            return Response('No structure JSON provided', status=400)
+            
+    except Exception as e:
+        logger.error(f"Error updating structure: {e}")
+        return Response(f"Error updating structure: {e}", status=500)
+
+
 @socketio.on("connect")
 def handleWsConnection():
     websocket_handler.handle_connection(socketio)

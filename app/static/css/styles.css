@@ -478,6 +478,9 @@ body {
     position: relative;
     word-wrap: break-word;
     overflow-wrap: break-word;
+    /* Prevent content from expanding beyond container */
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .chat-message.user .message-content {
@@ -494,6 +497,8 @@ body {
     border-bottom-left-radius: 0.25rem;
     max-width: 100%;
     width: 100%;
+    /* Ensure code blocks don't exceed container */
+    overflow-x: hidden;
 }
 
 .message-timestamp {
@@ -566,12 +571,116 @@ body {
     font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
     font-size: 0.85rem;
     line-height: 1.5;
+    position: relative;
+    max-width: 100%;
+    word-wrap: break-word;
+    white-space: pre-wrap;
 }
 
 .message-content pre code {
     background: none;
     padding: 0;
     color: inherit;
+}
+
+/* Code block container with controls */
+.code-block-container {
+    position: relative;
+    max-width: 100%;
+    margin: 0.5rem 0;
+}
+
+.code-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #1a202c;
+    color: #e2e8f0;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem 0.5rem 0 0;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.code-language-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #9ca3af;
+}
+
+.code-controls {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.code-control-btn {
+    background: transparent;
+    border: 1px solid #374151;
+    color: #9ca3af;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    font-size: 0.75rem;
+    transition: var(--transition);
+}
+
+.code-control-btn:hover {
+    background: #374151;
+    color: #e2e8f0;
+}
+
+.code-control-btn.copied {
+    background: var(--success-color);
+    color: white;
+    border-color: var(--success-color);
+}
+
+.code-block-content {
+    background: #2d3748;
+    border-radius: 0 0 0.5rem 0.5rem;
+    overflow: hidden;
+    max-width: 100%;
+}
+
+.code-block-content.collapsed {
+    max-height: 500px;
+    overflow: hidden;
+    position: relative;
+}
+
+.code-block-content.collapsed::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 50px;
+    background: linear-gradient(transparent, #2d3748);
+    pointer-events: none;
+}
+
+.code-block-content pre {
+    margin: 0;
+    border-radius: 0;
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.expand-toggle {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    width: 100%;
+    cursor: pointer;
+    font-size: 0.75rem;
+    border-radius: 0 0 0.5rem 0.5rem;
+    transition: var(--transition);
+}
+
+.expand-toggle:hover {
+    background: var(--primary-hover);
 }
 
 .message-content table {

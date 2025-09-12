@@ -2,7 +2,7 @@ import os
 import uuid
 import json
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Union
 from openai import AzureOpenAI
 
 try:
@@ -114,6 +114,63 @@ class ArchitectureDiagramService:
             'monitor': Monitor
         }
     
+    def _fix_json_format(self, json_str: str) -> str:
+        """
+        JSON 문자열의 일반적인 형식 문제를 수정합니다.
+        - 단일 따옴표를 이중 따옴표로 변경
+        - 후행 쉼표 제거
+        """
+        import re
+        
+        # 단일 따옴표를 이중 따옴표로 변경
+        fixed_json = json_str.replace("'", '"')
+        
+        # 후행 쉼표 제거
+        fixed_json = re.sub(r',(\s*[}\]])', r'\1', fixed_json)
+        
+        return fixed_json
+    
+    def _parse_json_safely(self, json_str: str, context: str = "") -> Dict[str, Any]:
+        """
+        JSON 문자열을 안전하게 파싱합니다. 실패시 형식 수정을 시도합니다.
+        """
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse JSON in {context}: {e}")
+            try:
+                fixed_json = self._fix_json_format(json_str)
+                result = json.loads(fixed_json)
+                logger.info(f"Successfully parsed JSON in {context} after fixing format issues")
+                return result
+            except json.JSONDecodeError as e2:
+                logger.error(f"Still failed to parse JSON in {context} after fixing: {e2}")
+                raise e2
+    
+    def _process_stream_response(self, stream_response) -> str:
+        """
+        스트림 응답을 처리하여 완전한 응답 텍스트를 반환합니다.
+        
+        Args:
+            stream_response: Azure OpenAI 스트림 응답 객체
+            
+        Returns:
+            str: 완전한 응답 텍스트
+        """
+        full_content = ""
+        try:
+            for chunk in stream_response:
+                if chunk.choices and len(chunk.choices) > 0:
+                    delta = chunk.choices[0].delta
+                    if hasattr(delta, 'content') and delta.content is not None:
+                        full_content += delta.content
+                        # 실시간 로그 출력 (선택사항)
+                        logger.debug(f"Stream chunk: {delta.content}")
+            return full_content
+        except Exception as e:
+            logger.error(f"Error processing stream response: {e}")
+            raise e
+    
     def generate_architecture_diagram(self, requirements: str) -> Dict[str, Any]:
         """
         아키텍처 요구사항을 받아서 Azure Architecture Diagram을 생성합니다.
@@ -168,12 +225,12 @@ class ArchitectureDiagramService:
                 'description': None
             }
     
-    def modify_architecture_diagram(self, structure_json: str, requirements: str) -> Dict[str, Any]:
+    def modify_architecture_diagram(self, structure_json: Union[str, Dict[str, Any]], requirements: str) -> Dict[str, Any]:
         """
         기존 아키텍처를 수정하는 기능입니다.
         
         Args:
-            structure_json: 기존 아키텍처 구조 JSON 문자열 (chat.html의 structureJson에서 가져옴)
+            structure_json: 기존 아키텍처 구조 (JSON 문자열 또는 딕셔너리)
             requirements: 수정 요구사항
             
         Returns:
@@ -185,16 +242,30 @@ class ArchitectureDiagramService:
         
         try:
             # 기존 구조가 비어있는 경우 새로 생성
-            if not structure_json or structure_json.strip() == "":
+            if not structure_json:
                 logger.info("Structure JSON is empty, generating new architecture")
                 return self.generate_architecture_diagram(requirements)
             
-            # 기존 구조 파싱
-            try:
-                previous_structure_dict = json.loads(structure_json)
-                logger.debug(f"Parsed previous structure: {previous_structure_dict}")
-            except json.JSONDecodeError as e:
-                logger.warning(f"Failed to parse structure JSON: {e}")
+            # structure_json이 이미 dict인 경우와 string인 경우 모두 처리
+            if isinstance(structure_json, dict):
+                # 이미 딕셔너리인 경우
+                previous_structure_dict = structure_json
+                logger.debug(f"Using existing dict structure: {previous_structure_dict}")
+            elif isinstance(structure_json, str):
+                # 문자열인 경우 strip() 체크 후 파싱
+                if structure_json.strip() == "":
+                    logger.info("Structure JSON string is empty, generating new architecture")
+                    return self.generate_architecture_diagram(requirements)
+                
+                try:
+                    previous_structure_dict = self._parse_json_safely(structure_json, "previous structure")
+                    logger.debug(f"Parsed previous structure: {previous_structure_dict}")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse structure JSON even after fixing: {e}")
+                    logger.info("Falling back to new architecture generation")
+                    return self.generate_architecture_diagram(requirements)
+            else:
+                logger.warning(f"Invalid structure_json type: {type(structure_json)}")
                 logger.info("Falling back to new architecture generation")
                 return self.generate_architecture_diagram(requirements)
             
@@ -283,16 +354,17 @@ class ArchitectureDiagramService:
         
         try:
             logger.debug("Calling OpenAI API for requirements analysis")
-            response = self.azure_openai.chat.completions.create(
+            stream_response = self.azure_openai.chat.completions.create(
                 model=azure_openai_deployment_name,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
+                stream=True
             )
             
-            logger.debug("OpenAI API call completed")
-            content = response.choices[0].message.content
+            logger.debug("OpenAI API call completed, processing stream")
+            content = self._process_stream_response(stream_response)
             logger.debug(f"OpenAI response content: {content}")
             
             # JSON 추출 - 더 견고한 방법으로 개선
@@ -337,12 +409,12 @@ class ArchitectureDiagramService:
                 logger.debug(f"Extracted JSON: {json_str}")
                 
                 # JSON 파싱 시도
-                result = json.loads(json_str)
+                result = self._parse_json_safely(json_str, "OpenAI response")
                 logger.debug(f"Parsed JSON structure: {result}")
                 return result
                 
             except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse extracted JSON: {e}")
+                logger.error(f"Failed to parse extracted JSON even after fixing: {e}")
                 logger.error(f"Problematic JSON: {json_str}")
                 logger.error(f"Full OpenAI response: {content}")
                 return self._get_default_structure()
@@ -411,16 +483,17 @@ class ArchitectureDiagramService:
         
         try:
             logger.debug("Calling OpenAI API for modification analysis")
-            response = self.azure_openai.chat.completions.create(
+            stream_response = self.azure_openai.chat.completions.create(
                 model=azure_openai_deployment_name,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
+                stream=True
             )
             
-            logger.debug("OpenAI API call completed for modification")
-            content = response.choices[0].message.content
+            logger.debug("OpenAI API call completed for modification, processing stream")
+            content = self._process_stream_response(stream_response)
             logger.debug(f"OpenAI modification response content: {content}")
             
             # JSON 추출
@@ -430,10 +503,14 @@ class ArchitectureDiagramService:
             
             logger.debug(f"Extracted modification JSON: {json_str}")
             
-            result = json.loads(json_str)
+            result = self._parse_json_safely(json_str, "modification analysis")
             logger.debug(f"Parsed modification JSON structure: {result}")
             return result
             
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse modification JSON even after fixing: {e}")
+            logger.info("Falling back to basic modification")
+            return self._apply_basic_modifications(previous_structure, requirements)
         except Exception as e:
             logger.exception(f"OpenAI 수정 분석 오류: {e}")
             logger.info("Falling back to basic modification")
@@ -630,15 +707,16 @@ class ArchitectureDiagramService:
             return self._get_default_description(structure)
         
         try:
-            response = self.azure_openai.chat.completions.create(
+            stream_response = self.azure_openai.chat.completions.create(
                 model=azure_openai_deployment_name,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
+                stream=True
             )
             
-            return response.choices[0].message.content
+            return self._process_stream_response(stream_response)
             
         except Exception as e:
             print(f"설명 생성 오류: {e}")
@@ -678,15 +756,16 @@ class ArchitectureDiagramService:
             return self._get_default_modification_description(previous_structure, modified_structure, requirements)
         
         try:
-            response = self.azure_openai.chat.completions.create(
+            stream_response = self.azure_openai.chat.completions.create(
                 model=azure_openai_deployment_name,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
+                stream=True
             )
             
-            return response.choices[0].message.content
+            return self._process_stream_response(stream_response)
             
         except Exception as e:
             print(f"수정 설명 생성 오류: {e}")
@@ -807,29 +886,29 @@ class ArchitectureDiagramService:
         
         try:
             # JSON 파싱
+            # Check for common JSON formatting issues
+            if not structure_json or not structure_json.strip():
+                logger.error("Empty structure JSON provided")
+                return {
+                    'success': False,
+                    'error': 'Empty JSON structure provided',
+                    'bicep_code': None,
+                    'deployment_guide': None
+                }
+            
+            # Clean up the JSON string
+            structure_json = structure_json.strip()
+            
+            # Remove any potential BOM or invisible characters
+            import codecs
+            if structure_json.startswith(codecs.BOM_UTF8.decode('utf-8')):
+                structure_json = structure_json[1:]
+                
+            # Log the exact JSON around the error position if possible
+            logger.info(f"Attempting to parse JSON: {structure_json}")
+            
             try:
-                # Check for common JSON formatting issues
-                if not structure_json or not structure_json.strip():
-                    logger.error("Empty structure JSON provided")
-                    return {
-                        'success': False,
-                        'error': 'Empty JSON structure provided',
-                        'bicep_code': None,
-                        'deployment_guide': None
-                    }
-                
-                # Clean up the JSON string
-                structure_json = structure_json.strip()
-                
-                # Remove any potential BOM or invisible characters
-                import codecs
-                if structure_json.startswith(codecs.BOM_UTF8.decode('utf-8')):
-                    structure_json = structure_json[1:]
-                
-                # Log the exact JSON around the error position if possible
-                logger.info(f"Attempting to parse JSON: {structure_json}")
-                
-                structure = json.loads(structure_json)
+                structure = self._parse_json_safely(structure_json, "bicep generation")
                 logger.debug(f"Parsed structure: {structure}")
                 
                 # Validate structure format
@@ -849,26 +928,13 @@ class ArchitectureDiagramService:
                     structure['components'] = [components] if components else []
                     
             except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse structure JSON: {e}")
-                logger.error(f"JSON content around error position (char {e.pos}): '{structure_json[max(0, e.pos-50):e.pos+50]}'")
-                
-                # Try to fix common JSON issues
-                try:
-                    # Remove potential trailing commas
-                    import re
-                    fixed_json = re.sub(r',(\s*[}\]])', r'\1', structure_json)
-                    # Try parsing the fixed JSON
-                    structure = json.loads(fixed_json)
-                    logger.info("Successfully parsed JSON after fixing trailing commas")
-                except json.JSONDecodeError as e2:
-                    logger.error(f"Still failed after attempting to fix JSON: {e2}")
-                    logger.error(f"Full JSON content: '{structure_json}'")
-                    return {
-                        'success': False,
-                        'error': f'Invalid JSON format: {str(e)}',
-                        'bicep_code': None,
-                        'deployment_guide': None
-                    }
+                logger.error(f"Failed to parse structure JSON even after fixing: {e}")
+                return {
+                    'success': False,
+                    'error': f'Invalid JSON format: {str(e)}',
+                    'bicep_code': None,
+                    'deployment_guide': None
+                }
             
             # OpenAI를 사용하여 Bicep 코드 생성
             logger.info("Generating Bicep code with OpenAI")
@@ -918,7 +984,7 @@ class ArchitectureDiagramService:
         bicep_prompt = self._create_bicep_generation_prompt(structure)
         
         try:
-            response = self.azure_openai.chat.completions.create(
+            stream_response = self.azure_openai.chat.completions.create(
                 model=azure_openai_deployment_name,
                 messages=[
                     {
@@ -931,10 +997,11 @@ class ArchitectureDiagramService:
                     }
                 ],
                 max_tokens=4000,
-                temperature=0.1
+                temperature=0.1,
+                stream=True
             )
             
-            bicep_content = response.choices[0].message.content
+            bicep_content = self._process_stream_response(stream_response)
             logger.debug(f"Generated Bicep content: {bicep_content}")
             
             # Bicep 코드와 파라미터 파일 분리

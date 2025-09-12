@@ -39,6 +39,7 @@ var currentAssistantMessage = null
 var wsResponseTimer = null
 // Complete response text for markdown parsing
 var completeWsResponse = ''
+var structureJson = ''
 
 // Chat utility functions
 function createChatMessage(sender, content = '', isMarkdown = false) {
@@ -158,13 +159,107 @@ function hideTypingIndicator() {
 
 // Configure marked for better rendering
 if (typeof marked !== 'undefined') {
+    const renderer = new marked.Renderer()
+    
+    // Custom code block renderer
+    renderer.code = function(code, language, escaped) {
+        const validLanguage = language && language.match(/^[A-Za-z0-9_+-]*$/) ? language : 'text'
+        const languageClass = validLanguage ? ` class="language-${validLanguage}"` : ''
+        const codeId = 'code-' + Math.random().toString(36).substr(2, 9)
+        
+        // Check if it's a long code block (more than 20 lines)
+        const lines = code.split('\n')
+        const isLongCode = lines.length > 20
+        const displayCode = isLongCode ? lines.slice(0, 20).join('\n') : code
+        const collapsedClass = isLongCode ? ' collapsed' : ''
+        
+        let languageLabel = validLanguage === 'text' ? 'Code' : validLanguage.toUpperCase()
+        if (validLanguage === 'bicep') {
+            languageLabel = 'Bicep Template'
+        }
+        
+        return `
+            <div class="code-block-container">
+                <div class="code-block-header">
+                    <span class="code-language-label">
+                        <i class="fas fa-code"></i>
+                        ${languageLabel}
+                    </span>
+                    <div class="code-controls">
+                        <button class="code-control-btn copy-btn" onclick="copyCodeToClipboard('${codeId}')" title="Copy to clipboard">
+                            <i class="fas fa-copy"></i> Copy
+                        </button>
+                    </div>
+                </div>
+                <div class="code-block-content${collapsedClass}" id="${codeId}-container">
+                    <pre><code${languageClass} id="${codeId}">${escaped ? code : escapeHtml(code)}</code></pre>
+                </div>
+                ${isLongCode ? `<button class="expand-toggle" onclick="toggleCodeExpansion('${codeId}-container', this)">
+                    <i class="fas fa-chevron-down"></i> Show More (${lines.length - 20} more lines)
+                </button>` : ''}
+            </div>
+        `
+    }
+    
     marked.setOptions({
         breaks: true,
         gfm: true,
         sanitize: false,
         smartLists: true,
-        smartypants: true
+        smartypants: true,
+        renderer: renderer
     })
+}
+
+// Helper function to escape HTML
+function escapeHtml(text) {
+    const div = document.createElement('div')
+    div.textContent = text
+    return div.innerHTML
+}
+
+// Function to copy code to clipboard
+window.copyCodeToClipboard = function(codeId) {
+    const codeElement = document.getElementById(codeId)
+    if (!codeElement) return
+    
+    const text = codeElement.textContent
+    navigator.clipboard.writeText(text).then(() => {
+        const button = document.querySelector(`[onclick="copyCodeToClipboard('${codeId}')"]`)
+        if (button) {
+            const originalContent = button.innerHTML
+            button.innerHTML = '<i class="fas fa-check"></i> Copied!'
+            button.classList.add('copied')
+            
+            setTimeout(() => {
+                button.innerHTML = originalContent
+                button.classList.remove('copied')
+            }, 2000)
+        }
+    }).catch(err => {
+        console.error('Failed to copy code: ', err)
+    })
+}
+
+// Function to toggle code expansion
+window.toggleCodeExpansion = function(containerId, button) {
+    const container = document.getElementById(containerId)
+    if (!container) return
+    
+    const isCollapsed = container.classList.contains('collapsed')
+    
+    if (isCollapsed) {
+        container.classList.remove('collapsed')
+        button.innerHTML = '<i class="fas fa-chevron-up"></i> Show Less'
+    } else {
+        container.classList.add('collapsed')
+        const codeElement = container.querySelector('code')
+        if (codeElement) {
+            const lines = codeElement.textContent.split('\n')
+            const hiddenLines = lines.length - 20
+            button.innerHTML = `<i class="fas fa-chevron-down"></i> Show More (${hiddenLines} more lines)`
+        }
+    }
 }
 
 // Function to process buffered content and extract complete tags
@@ -237,6 +332,7 @@ function processStreamBuffer(newChunk) {
 // Function to update structure JSON in textarea
 function updateStructureJson(structureData) {
     console.log('updateStructureJson called with data:', structureData)
+    structureJson = structureData;
     
     const structureTextarea = document.getElementById('structureJson')
     if (!structureTextarea) {
@@ -259,6 +355,9 @@ function updateStructureJson(structureData) {
             console.log('Structure JSON container made visible')
         }
         
+        // Send structure to server to update client context immediately
+        sendStructureToServer(formattedJson)
+        
     } catch (error) {
         console.error('Invalid JSON in STRUCTURE tag:', error, 'Raw data:', structureData)
         // Still update textarea with raw data if JSON is invalid
@@ -271,7 +370,40 @@ function updateStructureJson(structureData) {
             structureContainer.style.display = 'block'
             console.log('Structure JSON container made visible with raw data')
         }
+        
+        // Send raw structure to server as well
+        sendStructureToServer(structureData.trim())
     }
+}
+
+// Function to send structure to server
+function sendStructureToServer(structureJson) {
+    if (!clientId) {
+        console.error('Client ID not available for structure update')
+        return
+    }
+    
+    console.log('Sending structure to server:', structureJson.substring(0, 100) + '...')
+    
+    // Send via HTTP POST to update server-side client context
+    fetch('/api/update_structure', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'ClientId': clientId
+        },
+        body: JSON.stringify({
+            structureJson: structureJson
+        })
+    }).then(response => {
+        if (response.ok) {
+            console.log('Structure successfully sent to server')
+        } else {
+            console.error('Failed to send structure to server:', response.status)
+        }
+    }).catch(err => {
+        console.error('Error sending structure to server:', err)
+    })
 }
 
 // Function to clear stream buffer (call when response is complete)
@@ -911,14 +1043,10 @@ function handleUserQuery(userQuery) {
     currentAssistantMessage = null
     
     if (socket !== undefined) {
-        // 현재 structureJson 가져오기
-        const structureTextarea = document.getElementById('structureJson')
-        const currentStructure = structureTextarea ? structureTextarea.value : ''
-        
         // WebSocket에서도 JSON 구조로 전송
         const messageData = {
             query: userQuery,
-            structureJson: currentStructure
+            structureJson: structureJson
         }
         
         socket.emit('message', { 
@@ -931,14 +1059,10 @@ function handleUserQuery(userQuery) {
         return
     }
 
-    // 현재 structureJson 가져오기
-    const structureTextarea = document.getElementById('structureJson')
-    const currentStructure = structureTextarea ? structureTextarea.value : ''
-    
     // 항상 JSON 형태로 요청 데이터 구성
     const requestData = JSON.stringify({
         query: userQuery,
-        structureJson: currentStructure
+        structureJson: structureJson
     })
     const contentType = 'application/json'
     console.log('Sending request as JSON with structure data')
