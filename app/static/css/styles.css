@@ -498,7 +498,7 @@ body {
     max-width: 100%;
     width: 100%;
     /* Ensure code blocks don't exceed container */
-    overflow-x: hidden;
+    overflow-x: auto;
 }
 
 .message-timestamp {
