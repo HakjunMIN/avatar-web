@@ -177,6 +177,43 @@ mypy app/
 - `avatar_response`: 아바타 응답 수신
 - `status_update`: 상태 업데이트
 
+## 🔒 보안
+
+### 보안 문서
+
+프로젝트의 보안 관련 문서:
+
+- **[SECURITY_AUDIT_REPORT.md](SECURITY_AUDIT_REPORT.md)**: 종합 보안 취약점 분석 보고서
+  - 발견된 취약점 상세 정보
+  - 심각도 평가
+  - 수정 방안 및 우선순위
+  - 보안 권장사항
+
+- **[VULNERABILITY_SCAN_METHODOLOGY.md](VULNERABILITY_SCAN_METHODOLOGY.md)**: 취약점 스캔 방법론
+  - 사용된 도구 및 기법
+  - 스캐닝 프로세스
+  - 지속적 모니터링 권장사항
+
+### 의존성 보안
+
+정기적인 보안 스캔 수행:
+
+```bash
+# Python 패키지 취약점 스캔
+pip install safety
+safety check
+
+# 또는 uv 사용
+uv pip install safety
+uv run safety check
+```
+
+### 보안 업데이트
+
+- 정기적으로 의존성 업데이트: `uv lock` 후 `uv sync`
+- GitHub Security Advisories 확인
+- 보안 패치 즉시 적용
+
 ## 🐛 문제 해결
 
 ### 일반적인 문제
