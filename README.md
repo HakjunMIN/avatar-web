@@ -177,42 +177,42 @@ mypy app/
 - `avatar_response`: 아바타 응답 수신
 - `status_update`: 상태 업데이트
 
-## 🔒 보안
+## 🔒 Security
 
-### 보안 문서
+### Security Documentation
 
-프로젝트의 보안 관련 문서:
+Security-related documentation for this project:
 
-- **[SECURITY_AUDIT_REPORT.md](SECURITY_AUDIT_REPORT.md)**: 종합 보안 취약점 분석 보고서
-  - 발견된 취약점 상세 정보
-  - 심각도 평가
-  - 수정 방안 및 우선순위
-  - 보안 권장사항
+- **[SECURITY_AUDIT_REPORT.md](SECURITY_AUDIT_REPORT.md)**: Comprehensive security vulnerability analysis report
+  - Detailed information on discovered vulnerabilities
+  - Severity assessments
+  - Remediation plans and priorities
+  - Security recommendations
 
-- **[VULNERABILITY_SCAN_METHODOLOGY.md](VULNERABILITY_SCAN_METHODOLOGY.md)**: 취약점 스캔 방법론
-  - 사용된 도구 및 기법
-  - 스캐닝 프로세스
-  - 지속적 모니터링 권장사항
+- **[VULNERABILITY_SCAN_METHODOLOGY.md](VULNERABILITY_SCAN_METHODOLOGY.md)**: Vulnerability scanning methodology
+  - Tools and techniques used
+  - Scanning process
+  - Continuous monitoring recommendations
 
-### 의존성 보안
+### Dependency Security
 
-정기적인 보안 스캔 수행:
+Perform regular security scans:
 
 ```bash
-# Python 패키지 취약점 스캔
+# Scan Python packages for vulnerabilities
 pip install safety
 safety check
 
-# 또는 uv 사용
+# Or using uv
 uv pip install safety
 uv run safety check
 ```
 
-### 보안 업데이트
+### Security Updates
 
-- 정기적으로 의존성 업데이트: `uv lock` 후 `uv sync`
-- GitHub Security Advisories 확인
-- 보안 패치 즉시 적용
+- Regularly update dependencies: `uv lock` then `uv sync`
+- Check GitHub Security Advisories
+- Apply security patches immediately
 
 ## 🐛 문제 해결
 
