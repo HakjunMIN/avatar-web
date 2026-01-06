@@ -19,6 +19,7 @@ dependencies = [
     "diagrams",
     "graphviz",
     "pillow",
+    "urllib3>=2.6.0",
 ]
 
 [tool.uv]
