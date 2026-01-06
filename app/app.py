@@ -62,7 +62,7 @@ vad_service = VADService(
     speech_pad_ms=100
 )
 
-# 아키텍처 다이어그램 서비스 초기화
+# Initialize architecture diagram service
 architecture_service = ArchitectureDiagramService()
 
 websocket_handler = WebSocketHandler(
@@ -211,7 +211,7 @@ def chat() -> Response:
         chat_service.initialize_chat_context(request.headers.get('SystemPrompt'), client_id)
         client_context['chat_initiated'] = True
     
-    # 항상 JSON 형태로 요청 처리
+    # Always process requests in JSON format
     try:
         data = request.get_json()
         if not data:
@@ -220,7 +220,7 @@ def chat() -> Response:
         user_query = data.get('query', '')
         current_structure = data.get('structureJson', '')
         
-        # 클라이언트 컨텍스트에 현재 구조 저장
+        # Save current structure to client context
         if current_structure:
             client_context['current_structure'] = current_structure
             logger.info(f"Received structure from client for {client_id}: {len(current_structure)} characters")
@@ -290,16 +290,16 @@ def releaseClient() -> Response:
 
 @app.route("/api/diagram/<path:diagram_path>", methods=["GET"])
 def serveDiagram(diagram_path):
-    """다이어그램 파일을 서빙하는 엔드포인트"""
+    """Endpoint for serving diagram files"""
     try:
-        # URL 디코딩
+        # URL decoding
         decoded_path = urllib.parse.unquote(diagram_path)
         
-        # 파일 존재 여부 확인
+        # Check whether file exists
         if not os.path.exists(decoded_path):
             return Response('Diagram file not found.', status=404)
         
-        # 파일 전송
+        # Send file
         return send_file(decoded_path, mimetype='image/png')
     except Exception as e:
         logger.error(f"Error serving diagram: {e}")
@@ -308,7 +308,7 @@ def serveDiagram(diagram_path):
 
 @app.route("/api/update_structure", methods=["POST"])
 def updateStructure():
-    """구조 JSON 업데이트 엔드포인트"""
+    """Structure JSON update endpoint"""
     try:
         client_id = uuid.UUID(request.headers.get('ClientId'))
         data = request.get_json()
