@@ -5,20 +5,20 @@ description = "Microsoft Azure TTS Talking Avatar sample application"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "azure-cognitiveservices-speech",
-    "azure-identity",
-    "flask",
+    "azure-cognitiveservices-speech>=1.47.0",
+    "azure-identity>=1.25.1",
+    "flask>=3.1.2",
     "flask-socketio>=5.5.1",
     "openai>=1.76.0",
-    "pytz",
-    "requests",
+    "pytz>=2025.2",
+    "requests>=2.32.5",
     "torch>=2.6.0",
-    "numpy",
+    "numpy>=2.4.0",
     "torchaudio>=2.6.0",
-    "python-dotenv",
-    "diagrams",
-    "graphviz",
-    "pillow",
+    "python-dotenv>=1.2.1",
+    "diagrams>=0.25.1",
+    "graphviz>=0.21",
+    "pillow>=12.1.0",
 ]
 
 [tool.uv]
